@@ -1,0 +1,314 @@
+use std::fmt;
+use std::fs;
+use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
+
+use serde::Deserialize;
+use tauri::{AppHandle, Manager, Runtime};
+
+const CONFIG_FILE_NAME: &str = "config.toml";
+const DEFAULT_HOTKEY: &str = "Alt+Space";
+const DEFAULT_SILENT_DAYS_THRESHOLD: u32 = 7;
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum RuntimeMode {
+    #[default]
+    SqliteOnly,
+    PostgresOnly,
+    DualSync,
+}
+
+impl RuntimeMode {
+    pub fn from_config_value(value: &str) -> Option<Self> {
+        match value {
+            "sqlite_only" => Some(Self::SqliteOnly),
+            "postgres_only" => Some(Self::PostgresOnly),
+            "dual_sync" => Some(Self::DualSync),
+            _ => None,
+        }
+    }
+
+    pub fn as_config_value(&self) -> &'static str {
+        match self {
+            Self::SqliteOnly => "sqlite_only",
+            Self::PostgresOnly => "postgres_only",
+            Self::DualSync => "dual_sync",
+        }
+    }
+}
+
+impl fmt::Display for RuntimeMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_config_value())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppConfig {
+    pub runtime_mode: RuntimeMode,
+    pub postgres_dsn: Option<String>,
+    pub silent_days_threshold: u32,
+    pub hotkey: String,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            runtime_mode: RuntimeMode::SqliteOnly,
+            postgres_dsn: None,
+            silent_days_threshold: DEFAULT_SILENT_DAYS_THRESHOLD,
+            hotkey: DEFAULT_HOTKEY.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ConfigLoadReport {
+    pub config: AppConfig,
+    pub config_path: PathBuf,
+    pub warnings: Vec<String>,
+    pub used_fallback: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeConfigState {
+    pub config: AppConfig,
+    pub config_path: PathBuf,
+    pub warnings: Vec<String>,
+    pub used_fallback: bool,
+}
+
+impl From<ConfigLoadReport> for RuntimeConfigState {
+    fn from(report: ConfigLoadReport) -> Self {
+        Self {
+            config: report.config,
+            config_path: report.config_path,
+            warnings: report.warnings,
+            used_fallback: report.used_fallback,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct RawAppConfig {
+    runtime_mode: Option<String>,
+    postgres_dsn: Option<String>,
+    silent_days_threshold: Option<u32>,
+    hotkey: Option<String>,
+}
+
+pub fn load_from_app_data<R: Runtime>(app: &AppHandle<R>) -> ConfigLoadReport {
+    let (config_path, mut warnings) = resolve_config_path(app);
+    let mut report = load_from_path(&config_path);
+    if !warnings.is_empty() {
+        report.used_fallback = true;
+        warnings.append(&mut report.warnings);
+        report.warnings = warnings;
+    }
+    report
+}
+
+pub fn load_from_path(path: &Path) -> ConfigLoadReport {
+    let mut warnings = Vec::new();
+    let mut used_fallback = false;
+    let config = match fs::read_to_string(path) {
+        Ok(raw) => match parse_raw_config(&raw) {
+            Ok((parsed, parse_warnings, parse_used_fallback)) => {
+                if !parse_warnings.is_empty() {
+                    warnings.extend(parse_warnings);
+                }
+                if parse_used_fallback {
+                    used_fallback = true;
+                }
+                parsed
+            }
+            Err(error) => {
+                warnings.push(format!(
+                    "failed to parse config file {}, fallback to defaults: {error}",
+                    path.display()
+                ));
+                used_fallback = true;
+                AppConfig::default()
+            }
+        },
+        Err(error) => {
+            if error.kind() == ErrorKind::NotFound {
+                warnings.push(format!(
+                    "config file not found at {}, fallback to defaults",
+                    path.display()
+                ));
+            } else {
+                warnings.push(format!(
+                    "failed to read config file {}, fallback to defaults: {error}",
+                    path.display()
+                ));
+            }
+            used_fallback = true;
+            AppConfig::default()
+        }
+    };
+
+    ConfigLoadReport {
+        config,
+        config_path: path.to_path_buf(),
+        warnings,
+        used_fallback,
+    }
+}
+
+fn resolve_config_path<R: Runtime>(app: &AppHandle<R>) -> (PathBuf, Vec<String>) {
+    match app.path().app_data_dir() {
+        Ok(mut dir) => {
+            dir.push(CONFIG_FILE_NAME);
+            (dir, Vec::new())
+        }
+        Err(error) => (
+            PathBuf::from(CONFIG_FILE_NAME),
+            vec![format!(
+                "failed to resolve app data directory, fallback path is {CONFIG_FILE_NAME}: {error}"
+            )],
+        ),
+    }
+}
+
+fn parse_raw_config(raw: &str) -> Result<(AppConfig, Vec<String>, bool), toml::de::Error> {
+    let parsed: RawAppConfig = toml::from_str(raw)?;
+    let mut warnings = Vec::new();
+    let mut used_fallback = false;
+
+    let runtime_mode = match parsed.runtime_mode.as_deref() {
+        Some(mode) => match RuntimeMode::from_config_value(mode) {
+            Some(runtime_mode) => runtime_mode,
+            None => {
+                warnings.push(format!(
+                    "invalid runtime_mode `{mode}`, fallback to sqlite_only"
+                ));
+                used_fallback = true;
+                RuntimeMode::default()
+            }
+        },
+        None => {
+            warnings.push("missing runtime_mode, fallback to sqlite_only".to_string());
+            used_fallback = true;
+            RuntimeMode::default()
+        }
+    };
+
+    let hotkey = match parsed.hotkey {
+        Some(hotkey) if !hotkey.trim().is_empty() => hotkey,
+        Some(_) => {
+            warnings.push(format!(
+                "empty hotkey, fallback to default `{DEFAULT_HOTKEY}`"
+            ));
+            DEFAULT_HOTKEY.to_string()
+        }
+        None => DEFAULT_HOTKEY.to_string(),
+    };
+
+    let postgres_dsn = parsed.postgres_dsn.and_then(|dsn| {
+        let trimmed = dsn.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
+
+    let config = AppConfig {
+        runtime_mode,
+        postgres_dsn,
+        silent_days_threshold: parsed
+            .silent_days_threshold
+            .unwrap_or(DEFAULT_SILENT_DAYS_THRESHOLD),
+        hotkey,
+    };
+
+    Ok((config, warnings, used_fallback))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::{load_from_path, RuntimeMode};
+
+    #[test]
+    fn parses_all_supported_runtime_modes() {
+        let test_cases = [
+            ("sqlite_only", RuntimeMode::SqliteOnly),
+            ("postgres_only", RuntimeMode::PostgresOnly),
+            ("dual_sync", RuntimeMode::DualSync),
+        ];
+
+        for (raw_mode, expected_mode) in test_cases {
+            let file_path = create_temp_config_path(raw_mode);
+            std::fs::create_dir_all(
+                file_path
+                    .parent()
+                    .expect("temp config path should have a parent"),
+            )
+            .expect("failed to create temp directory");
+            std::fs::write(&file_path, format!("runtime_mode = \"{raw_mode}\""))
+                .expect("failed to write temp config");
+
+            let report = load_from_path(&file_path);
+            assert_eq!(report.config.runtime_mode, expected_mode);
+            assert!(!report.used_fallback);
+            assert!(report.warnings.is_empty());
+
+            cleanup_temp_path(&file_path);
+        }
+    }
+
+    #[test]
+    fn falls_back_when_runtime_mode_is_invalid() {
+        let file_path = create_temp_config_path("invalid-runtime-mode");
+        std::fs::create_dir_all(
+            file_path
+                .parent()
+                .expect("temp config path should have a parent"),
+        )
+        .expect("failed to create temp directory");
+        std::fs::write(
+            &file_path,
+            "runtime_mode = \"invalid_mode\"\nhotkey = \"Ctrl+Shift+R\"",
+        )
+        .expect("failed to write temp config");
+
+        let report = load_from_path(&file_path);
+        assert_eq!(report.config.runtime_mode, RuntimeMode::SqliteOnly);
+        assert!(report.used_fallback);
+        assert!(!report.warnings.is_empty());
+        assert!(report.warnings[0].contains("invalid runtime_mode"));
+
+        cleanup_temp_path(&file_path);
+    }
+
+    #[test]
+    fn falls_back_when_config_file_is_missing() {
+        let file_path = create_temp_config_path("missing");
+        let report = load_from_path(&file_path);
+
+        assert_eq!(report.config.runtime_mode, RuntimeMode::SqliteOnly);
+        assert!(report.used_fallback);
+        assert!(!report.warnings.is_empty());
+        assert!(report.warnings[0].contains("config file not found"));
+    }
+
+    fn create_temp_config_path(suffix: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock went backwards")
+            .as_nanos();
+        std::env::temp_dir()
+            .join(format!("remember-p1-t2-{suffix}-{nonce}"))
+            .join("config.toml")
+    }
+
+    fn cleanup_temp_path(path: &PathBuf) {
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+}
