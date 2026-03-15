@@ -1,0 +1,28 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - heading "Remember" [level=1] [ref=e5]
+    - paragraph [ref=e6]: Phase 1 Task 1 - Layered Skeleton
+    - generic [ref=e7]:
+      - generic [ref=e8]: "UI: ready"
+      - generic [ref=e9]: "Adapter: ready"
+      - generic [ref=e10]: "Application: ready"
+      - generic [ref=e11]: "Repository: stubbed"
+  - generic [ref=e12]:
+    - article [ref=e13]:
+      - heading "Series List Preview" [level=2] [ref=e14]
+      - list [ref=e15]:
+        - listitem [ref=e16]:
+          - generic [ref=e17]: Inbox
+          - generic [ref=e18]: first-note
+        - listitem [ref=e19]:
+          - generic [ref=e20]: Project-A
+          - generic [ref=e21]: follow-up-note
+    - article [ref=e22]:
+      - heading "Timeline Preview" [level=2] [ref=e23]
+      - list [ref=e24]:
+        - listitem [ref=e25]:
+          - generic [ref=e26]: 2026-03-15 15:32:00
+          - generic [ref=e27]: first-note
+        - listitem [ref=e28]:
+          - generic [ref=e29]: 2026-03-15 15:35:00
+          - generic [ref=e30]: follow-up-note
