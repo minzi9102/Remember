@@ -64,7 +64,7 @@ $env:PW_BROWSER = 'msedge'
   1. `npx --yes --package @playwright/cli playwright-cli -s=P1T2-VG-FAIL open $env:TARGET_URL_FAIL --browser $env:PW_BROWSER`
   2. `npx --yes --package @playwright/cli playwright-cli -s=P1T2-VG-FAIL snapshot`
   3. 捕获 `config-warning-banner` 和 fallback 标签截图。
-  3. 使用 `take_screenshot.ps1 -Mode temp -ActiveWindow` 补充桌面证据（可选）。
+  4. 使用 `take_screenshot.ps1 -Mode temp -ActiveWindow` 补充桌面证据（可选）。
 - oracle:
   1. 存在明确失败反馈，不能静默失败。
   2. `runtime-mode-badge` 回退为 `sqlite_only`，且 warning 明确包含非法模式信息。
