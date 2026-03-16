@@ -5,7 +5,7 @@
 {"task_name":"定义共享 DTO（`SeriesSummary`、`CommitItem` 等）。","completed":true}
 {"task_name":"实现 SQLite/Postgres 同构 migration。","completed":true}
 {"task_name":"定义并实现 Repository Trait 与两个后端。","completed":true}
-{"task_name":"完成 Application Service（创建系列、提交、列表、时间线、归档、搜索）。","completed":false}
+{"task_name":"完成 Application Service（创建系列、提交、列表、时间线、归档、搜索）。","completed":true}
 {"task_name":"按 `runtime_mode` 注入后端实现。","completed":false}
 {"task_name":"完成基础读写与查询测试。","completed":false}
 {"task_name":"实现 `DualSyncRepository`（统一 `commit_id + created_at`）。","completed":false}

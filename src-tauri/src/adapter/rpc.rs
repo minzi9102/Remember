@@ -6,14 +6,14 @@ use tauri::State;
 
 use crate::application::{
     config::RuntimeConfigState,
-    dto::{
-        CommitAppendData, CommitItem, SeriesArchiveData, SeriesCreateData, SeriesListData,
-        SeriesScanSilentData, SeriesStatus, SeriesSummary, TimelineListData,
-    },
+    service::{ApplicationError, ApplicationService, ApplicationServiceState},
 };
 
 const VALIDATION_ERROR_CODE: &str = "VALIDATION_ERROR";
 const UNKNOWN_COMMAND_CODE: &str = "UNKNOWN_COMMAND";
+const NOT_FOUND_CODE: &str = "NOT_FOUND";
+const CONFLICT_CODE: &str = "CONFLICT";
+const INTERNAL_ERROR_CODE: &str = "INTERNAL_ERROR";
 const PG_TIMEOUT_CODE: &str = "PG_TIMEOUT";
 const DUAL_WRITE_FAILED_CODE: &str = "DUAL_WRITE_FAILED";
 const FORCE_ERROR_CODE_FIELD: &str = "__forceErrorCode";
@@ -49,6 +49,9 @@ pub struct RpcMeta {
 enum RpcErrorKind {
     Validation,
     UnknownCommand,
+    NotFound,
+    Conflict,
+    Internal,
     PgTimeout,
     DualWriteFailed,
 }
@@ -58,15 +61,22 @@ pub(crate) fn rpc_invoke(
     path: String,
     payload: Option<Value>,
     config_state: State<'_, RuntimeConfigState>,
+    service_state: State<'_, ApplicationServiceState>,
 ) -> RpcEnvelope {
-    handle_rpc(
+    tauri::async_runtime::block_on(handle_rpc(
         &path,
         payload.unwrap_or(Value::Null),
         config_state.inner(),
-    )
+        service_state.service(),
+    ))
 }
 
-pub(crate) fn handle_rpc(path: &str, payload: Value, config_state: &RuntimeConfigState) -> RpcEnvelope {
+pub(crate) async fn handle_rpc(
+    path: &str,
+    payload: Value,
+    config_state: &RuntimeConfigState,
+    service: &ApplicationService,
+) -> RpcEnvelope {
     tracing::debug!(
         component = "rpc",
         path,
@@ -86,7 +96,7 @@ pub(crate) fn handle_rpc(path: &str, payload: Value, config_state: &RuntimeConfi
             );
             Err(error)
         }
-        Ok(None) => dispatch(path, &payload),
+        Ok(None) => dispatch(path, &payload, service).await,
         Err(error) => Err(error),
     };
 
@@ -133,6 +143,9 @@ impl RpcErrorKind {
         match self {
             Self::Validation => VALIDATION_ERROR_CODE,
             Self::UnknownCommand => UNKNOWN_COMMAND_CODE,
+            Self::NotFound => NOT_FOUND_CODE,
+            Self::Conflict => CONFLICT_CODE,
+            Self::Internal => INTERNAL_ERROR_CODE,
             Self::PgTimeout => PG_TIMEOUT_CODE,
             Self::DualWriteFailed => DUAL_WRITE_FAILED_CODE,
         }
@@ -158,6 +171,18 @@ impl RpcError {
         )
     }
 
+    fn not_found(message: impl Into<String>) -> Self {
+        Self::from_kind(RpcErrorKind::NotFound, message)
+    }
+
+    fn conflict(message: impl Into<String>) -> Self {
+        Self::from_kind(RpcErrorKind::Conflict, message)
+    }
+
+    fn internal(message: impl Into<String>) -> Self {
+        Self::from_kind(RpcErrorKind::Internal, message)
+    }
+
     fn pg_timeout(message: impl Into<String>) -> Self {
         Self::from_kind(RpcErrorKind::PgTimeout, message)
     }
@@ -170,7 +195,11 @@ impl RpcError {
 fn build_meta(path: &str, config_state: &RuntimeConfigState) -> RpcMeta {
     RpcMeta {
         path: path.to_string(),
-        runtime_mode: config_state.config.runtime_mode.as_config_value().to_string(),
+        runtime_mode: config_state
+            .config
+            .runtime_mode
+            .as_config_value()
+            .to_string(),
         used_fallback: config_state.used_fallback,
         responded_at_unix_ms: current_unix_ms(),
     }
@@ -210,169 +239,190 @@ fn resolve_forced_error(payload: &Value) -> Result<Option<RpcError>, RpcError> {
     Ok(Some(forced_error))
 }
 
-fn dispatch(path: &str, payload: &Value) -> Result<Value, RpcError> {
+async fn dispatch(
+    path: &str,
+    payload: &Value,
+    service: &ApplicationService,
+) -> Result<Value, RpcError> {
     match path {
-        "series.create" => series_create(payload),
-        "series.list" => series_list(payload),
-        "commit.append" => commit_append(payload),
-        "timeline.list" => timeline_list(payload),
-        "series.archive" => series_archive(payload),
-        "series.scan_silent" => series_scan_silent(payload),
+        "series.create" => series_create(payload, service).await,
+        "series.list" => series_list(payload, service).await,
+        "commit.append" => commit_append(payload, service).await,
+        "timeline.list" => timeline_list(payload, service).await,
+        "series.archive" => series_archive(payload, service).await,
+        "series.scan_silent" => series_scan_silent(payload, service).await,
         _ => Err(RpcError::unknown_path(path)),
     }
 }
 
-fn series_create(payload: &Value) -> Result<Value, RpcError> {
+async fn series_create(payload: &Value, service: &ApplicationService) -> Result<Value, RpcError> {
     let name = required_non_empty_string(payload, "name")?;
-    serialize_data(SeriesCreateData {
-        series: build_series_summary(
-            "stub-series-inbox",
-            &name,
-            "stubbed-command-shell",
-            "2026-03-16T00:00:00Z",
-        ),
-    })
+    let data = service
+        .create_series(name)
+        .await
+        .map_err(map_application_error)?;
+    serialize_data(data)
 }
 
-fn series_list(payload: &Value) -> Result<Value, RpcError> {
-    let limit = optional_positive_u64(payload, "limit")?.unwrap_or(50);
-    serialize_data(SeriesListData {
-        items: vec![build_series_summary(
-            "series-inbox",
-            "Inbox",
-            "first-note",
-            "2026-03-16T00:00:00Z",
-        )],
-        next_cursor: None,
-        limit_echo: limit,
-    })
+async fn series_list(payload: &Value, service: &ApplicationService) -> Result<Value, RpcError> {
+    let query = required_string(payload, "query")?;
+    let include_archived = required_bool(payload, "includeArchived")?;
+    let cursor = required_optional_string(payload, "cursor")?;
+    let limit = required_positive_u64(payload, "limit")?;
+    let data = service
+        .list_series(query, include_archived, cursor, limit)
+        .await
+        .map_err(map_application_error)?;
+    serialize_data(data)
 }
 
-fn commit_append(payload: &Value) -> Result<Value, RpcError> {
+async fn commit_append(payload: &Value, service: &ApplicationService) -> Result<Value, RpcError> {
     let series_id = required_non_empty_string(payload, "seriesId")?;
     let content = required_non_empty_string(payload, "content")?;
-    let latest_excerpt = excerpt(&content);
-
-    serialize_data(CommitAppendData {
-        commit: CommitItem {
-            id: "stub-commit-001".to_string(),
-            series_id: series_id.clone(),
-            content,
-            created_at: "2026-03-16T00:00:00Z".to_string(),
-        },
-        series: build_series_summary(
-            &series_id,
-            "Stub Series",
-            &latest_excerpt,
-            "2026-03-16T00:00:00Z",
-        ),
-    })
+    let client_ts = required_non_empty_string(payload, "clientTs")?;
+    let data = service
+        .append_commit(series_id, content, client_ts)
+        .await
+        .map_err(map_application_error)?;
+    serialize_data(data)
 }
 
-fn timeline_list(payload: &Value) -> Result<Value, RpcError> {
+async fn timeline_list(payload: &Value, service: &ApplicationService) -> Result<Value, RpcError> {
     let series_id = required_non_empty_string(payload, "seriesId")?;
-    serialize_data(TimelineListData {
-        series_id: series_id.clone(),
-        items: vec![CommitItem {
-            id: "stub-commit-001".to_string(),
-            series_id,
-            content: "first-note".to_string(),
-            created_at: "2026-03-16T00:00:00Z".to_string(),
-        }],
-        next_cursor: None,
-    })
+    let cursor = required_optional_string(payload, "cursor")?;
+    let limit = required_positive_u64(payload, "limit")?;
+    let data = service
+        .list_timeline(series_id, cursor, limit)
+        .await
+        .map_err(map_application_error)?;
+    serialize_data(data)
 }
 
-fn series_archive(payload: &Value) -> Result<Value, RpcError> {
+async fn series_archive(payload: &Value, service: &ApplicationService) -> Result<Value, RpcError> {
     let series_id = required_non_empty_string(payload, "seriesId")?;
-    serialize_data(SeriesArchiveData {
-        series_id,
-        archived_at: "2026-03-16T00:00:00Z".to_string(),
-    })
+    let data = service
+        .archive_series(series_id)
+        .await
+        .map_err(map_application_error)?;
+    serialize_data(data)
 }
 
-fn series_scan_silent(payload: &Value) -> Result<Value, RpcError> {
-    let threshold_days = optional_positive_u64(payload, "thresholdDays")?.unwrap_or(7);
-    serialize_data(SeriesScanSilentData {
-        affected_series_ids: Vec::new(),
-        threshold_days,
-    })
+async fn series_scan_silent(
+    payload: &Value,
+    service: &ApplicationService,
+) -> Result<Value, RpcError> {
+    let now = required_non_empty_string(payload, "now")?;
+    let threshold_days = required_positive_u64(payload, "thresholdDays")?;
+    let data = service
+        .scan_silent(now, threshold_days)
+        .await
+        .map_err(map_application_error)?;
+    serialize_data(data)
 }
 
-fn build_series_summary(
-    id: &str,
-    name: &str,
-    latest_excerpt: &str,
-    last_updated_at: &str,
-) -> SeriesSummary {
-    SeriesSummary {
-        id: id.to_string(),
-        name: name.to_string(),
-        status: SeriesStatus::Active,
-        last_updated_at: last_updated_at.to_string(),
-        latest_excerpt: latest_excerpt.to_string(),
-        created_at: "2026-03-15T00:00:00Z".to_string(),
-        archived_at: None,
+fn map_application_error(error: ApplicationError) -> RpcError {
+    match error {
+        ApplicationError::Validation(message) => RpcError::validation(message),
+        ApplicationError::NotFound(message) => RpcError::not_found(message),
+        ApplicationError::Conflict(message) => RpcError::conflict(message),
+        ApplicationError::Internal(message) => RpcError::internal(message),
     }
 }
 
 fn serialize_data<T: Serialize>(data: T) -> Result<Value, RpcError> {
     to_value(data).map_err(|error| {
-        RpcError::validation(format!(
-            "failed to serialize rpc response payload: {error}"
-        ))
+        RpcError::validation(format!("failed to serialize rpc response payload: {error}"))
     })
 }
 
-fn required_non_empty_string(payload: &Value, key: &str) -> Result<String, RpcError> {
+fn required_string(payload: &Value, key: &str) -> Result<String, RpcError> {
     payload
         .as_object()
         .and_then(|object| object.get(key))
         .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .ok_or_else(|| {
+            RpcError::validation(format!("field `{key}` is required and must be a string"))
+        })
+}
+
+fn required_non_empty_string(payload: &Value, key: &str) -> Result<String, RpcError> {
+    let value = required_string(payload, key)?;
+    if value.trim().is_empty() {
+        return Err(RpcError::validation(format!(
+            "field `{key}` is required and must be a non-empty string"
+        )));
+    }
+    Ok(value)
+}
+
+fn required_optional_string(payload: &Value, key: &str) -> Result<Option<String>, RpcError> {
+    let Some(raw_value) = payload.as_object().and_then(|object| object.get(key)) else {
+        return Err(RpcError::validation(format!(
+            "field `{key}` is required and must be a string or null"
+        )));
+    };
+    if raw_value.is_null() {
+        return Ok(None);
+    }
+
+    raw_value
+        .as_str()
+        .map(str::trim)
+        .map(ToOwned::to_owned)
+        .map(Some)
+        .ok_or_else(|| {
             RpcError::validation(format!(
-                "field `{key}` is required and must be a non-empty string"
+                "field `{key}` is required and must be a string or null"
             ))
         })
 }
 
-fn optional_positive_u64(payload: &Value, key: &str) -> Result<Option<u64>, RpcError> {
-    if let Some(raw_value) = payload.as_object().and_then(|object| object.get(key)) {
-        return raw_value
-            .as_u64()
-            .filter(|value| *value > 0)
-            .map(Some)
-            .ok_or_else(|| RpcError::validation(format!("field `{key}` must be a positive integer")));
-    }
-
-    Ok(None)
+fn required_bool(payload: &Value, key: &str) -> Result<bool, RpcError> {
+    payload
+        .as_object()
+        .and_then(|object| object.get(key))
+        .and_then(Value::as_bool)
+        .ok_or_else(|| {
+            RpcError::validation(format!("field `{key}` is required and must be a boolean"))
+        })
 }
 
-fn excerpt(content: &str) -> String {
-    let mut preview: String = content.chars().take(48).collect();
-    if content.chars().count() > 48 {
-        preview.push_str("...");
-    }
-    preview
+fn required_positive_u64(payload: &Value, key: &str) -> Result<u64, RpcError> {
+    payload
+        .as_object()
+        .and_then(|object| object.get(key))
+        .and_then(Value::as_u64)
+        .filter(|value| *value > 0)
+        .ok_or_else(|| RpcError::validation(format!("field `{key}` must be a positive integer")))
 }
 
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
+    use serde_json::Value;
+
     use super::{
-        handle_rpc, DUAL_WRITE_FAILED_CODE, PG_TIMEOUT_CODE, UNKNOWN_COMMAND_CODE,
+        handle_rpc, DUAL_WRITE_FAILED_CODE, NOT_FOUND_CODE, PG_TIMEOUT_CODE, UNKNOWN_COMMAND_CODE,
         VALIDATION_ERROR_CODE,
     };
-    use crate::application::config::{AppConfig, RuntimeConfigState, RuntimeMode};
+    use crate::application::{
+        config::{AppConfig, RuntimeConfigState, RuntimeMode},
+        service::build_test_service_state,
+    };
 
-    #[test]
-    fn returns_success_envelope_for_known_path() {
+    #[tokio::test]
+    async fn returns_success_envelope_for_known_path() {
         let state = test_state();
-        let envelope = handle_rpc("series.create", serde_json::json!({ "name": "Inbox" }), &state);
+        let service_state = build_test_service_state().await;
+        let envelope = handle_rpc(
+            "series.create",
+            serde_json::json!({ "name": "Inbox" }),
+            &state,
+            service_state.service(),
+        )
+        .await;
 
         assert!(envelope.ok);
         assert!(envelope.error.is_none());
@@ -381,131 +431,226 @@ mod tests {
         let data = envelope
             .data
             .as_ref()
-            .and_then(|value| value.as_object())
+            .and_then(Value::as_object)
             .expect("data should be an object");
         let series = data
             .get("series")
-            .and_then(|value| value.as_object())
+            .and_then(Value::as_object)
             .expect("series should exist");
 
-        assert_eq!(series.get("id").and_then(|value| value.as_str()), Some("stub-series-inbox"));
-        assert_eq!(series.get("name").and_then(|value| value.as_str()), Some("Inbox"));
-        assert_eq!(series.get("status").and_then(|value| value.as_str()), Some("active"));
+        assert!(series.get("id").and_then(Value::as_str).is_some());
+        assert_eq!(series.get("name").and_then(Value::as_str), Some("Inbox"));
+        assert_eq!(series.get("status").and_then(Value::as_str), Some("active"));
         assert!(series.contains_key("lastUpdatedAt"));
         assert!(series.contains_key("latestExcerpt"));
         assert!(series.contains_key("createdAt"));
     }
 
-    #[test]
-    fn returns_commit_item_fields_for_commit_append() {
+    #[tokio::test]
+    async fn returns_commit_item_fields_for_commit_append() {
         let state = test_state();
+        let service_state = build_test_service_state().await;
+        let created = handle_rpc(
+            "series.create",
+            serde_json::json!({ "name": "Inbox" }),
+            &state,
+            service_state.service(),
+        )
+        .await;
+        let series_id = created
+            .data
+            .as_ref()
+            .and_then(|value| value.get("series"))
+            .and_then(|value| value.get("id"))
+            .and_then(Value::as_str)
+            .expect("series id should exist")
+            .to_string();
+
         let envelope = handle_rpc(
             "commit.append",
-            serde_json::json!({ "seriesId": "series-inbox", "content": "first-note" }),
+            serde_json::json!({
+                "seriesId": series_id,
+                "content": "first-note",
+                "clientTs": "2026-03-16T10:00:00+08:00"
+            }),
             &state,
-        );
+            service_state.service(),
+        )
+        .await;
 
         assert!(envelope.ok);
         let data = envelope
             .data
             .as_ref()
-            .and_then(|value| value.as_object())
+            .and_then(Value::as_object)
             .expect("data should be an object");
         let commit = data
             .get("commit")
-            .and_then(|value| value.as_object())
+            .and_then(Value::as_object)
             .expect("commit should exist");
 
-        assert_eq!(commit.get("id").and_then(|value| value.as_str()), Some("stub-commit-001"));
+        assert!(commit.get("id").and_then(Value::as_str).is_some());
         assert_eq!(
-            commit.get("seriesId").and_then(|value| value.as_str()),
-            Some("series-inbox")
-        );
-        assert_eq!(
-            commit.get("content").and_then(|value| value.as_str()),
+            commit.get("content").and_then(Value::as_str),
             Some("first-note")
         );
-        assert!(commit.contains_key("createdAt"));
+        assert_eq!(
+            commit.get("createdAt").and_then(Value::as_str),
+            Some("2026-03-16T02:00:00Z")
+        );
     }
 
-    #[test]
-    fn returns_commit_items_for_timeline_list() {
+    #[tokio::test]
+    async fn returns_commit_items_for_timeline_list() {
         let state = test_state();
+        let service_state = build_test_service_state().await;
+        let created = handle_rpc(
+            "series.create",
+            serde_json::json!({ "name": "Inbox" }),
+            &state,
+            service_state.service(),
+        )
+        .await;
+        let series_id = created
+            .data
+            .as_ref()
+            .and_then(|value| value.get("series"))
+            .and_then(|value| value.get("id"))
+            .and_then(Value::as_str)
+            .expect("series id should exist")
+            .to_string();
+        let _ = handle_rpc(
+            "commit.append",
+            serde_json::json!({
+                "seriesId": series_id,
+                "content": "first-note",
+                "clientTs": "2026-03-16T00:00:00Z"
+            }),
+            &state,
+            service_state.service(),
+        )
+        .await;
+
         let envelope = handle_rpc(
             "timeline.list",
-            serde_json::json!({ "seriesId": "series-inbox" }),
+            serde_json::json!({
+                "seriesId": series_id,
+                "cursor": null,
+                "limit": 20
+            }),
             &state,
-        );
+            service_state.service(),
+        )
+        .await;
 
         assert!(envelope.ok);
         let data = envelope
             .data
             .as_ref()
-            .and_then(|value| value.as_object())
+            .and_then(Value::as_object)
             .expect("data should be an object");
-        assert_eq!(
-            data.get("seriesId").and_then(|value| value.as_str()),
-            Some("series-inbox")
-        );
         let items = data
             .get("items")
-            .and_then(|value| value.as_array())
+            .and_then(Value::as_array)
             .expect("items should exist");
+        assert_eq!(items.len(), 1);
         let first_item = items
             .first()
-            .and_then(|value| value.as_object())
+            .and_then(Value::as_object)
             .expect("first timeline item should be object");
-        assert_eq!(
-            first_item.get("seriesId").and_then(|value| value.as_str()),
-            Some("series-inbox")
-        );
         assert!(first_item.contains_key("id"));
         assert!(first_item.contains_key("content"));
         assert!(first_item.contains_key("createdAt"));
     }
 
-    #[test]
-    fn returns_validation_error_for_invalid_payload() {
+    #[tokio::test]
+    async fn returns_validation_error_for_invalid_payload() {
         let state = test_state();
-        let envelope = handle_rpc("series.create", serde_json::json!({ "name": "" }), &state);
+        let service_state = build_test_service_state().await;
+        let envelope = handle_rpc(
+            "series.list",
+            serde_json::json!({
+                "query": "",
+                "includeArchived": false,
+                "cursor": null,
+                "limit": 0
+            }),
+            &state,
+            service_state.service(),
+        )
+        .await;
 
         assert!(!envelope.ok);
         let error = envelope.error.expect("error should exist");
         assert_eq!(error.code, VALIDATION_ERROR_CODE);
     }
 
-    #[test]
-    fn returns_unknown_command_error_for_unknown_path() {
+    #[tokio::test]
+    async fn maps_service_not_found_to_rpc_not_found() {
         let state = test_state();
-        let envelope = handle_rpc("series.unknown", serde_json::json!({}), &state);
+        let service_state = build_test_service_state().await;
+        let envelope = handle_rpc(
+            "timeline.list",
+            serde_json::json!({
+                "seriesId": "missing-series",
+                "cursor": null,
+                "limit": 20
+            }),
+            &state,
+            service_state.service(),
+        )
+        .await;
+
+        assert!(!envelope.ok);
+        let error = envelope.error.expect("error should exist");
+        assert_eq!(error.code, NOT_FOUND_CODE);
+    }
+
+    #[tokio::test]
+    async fn returns_unknown_command_error_for_unknown_path() {
+        let state = test_state();
+        let service_state = build_test_service_state().await;
+        let envelope = handle_rpc(
+            "series.unknown",
+            serde_json::json!({}),
+            &state,
+            service_state.service(),
+        )
+        .await;
 
         assert!(!envelope.ok);
         let error = envelope.error.expect("error should exist");
         assert_eq!(error.code, UNKNOWN_COMMAND_CODE);
     }
 
-    #[test]
-    fn returns_pg_timeout_error_when_forced() {
+    #[tokio::test]
+    async fn returns_pg_timeout_error_when_forced() {
         let state = test_state();
+        let service_state = build_test_service_state().await;
         let envelope = handle_rpc(
             "series.create",
             serde_json::json!({ "name": "Inbox", "__forceErrorCode": "PG_TIMEOUT" }),
             &state,
-        );
+            service_state.service(),
+        )
+        .await;
 
         assert!(!envelope.ok);
         let error = envelope.error.expect("error should exist");
         assert_eq!(error.code, PG_TIMEOUT_CODE);
     }
 
-    #[test]
-    fn returns_dual_write_failed_error_when_forced() {
+    #[tokio::test]
+    async fn returns_dual_write_failed_error_when_forced() {
         let state = test_state();
+        let service_state = build_test_service_state().await;
         let envelope = handle_rpc(
             "series.create",
             serde_json::json!({ "name": "Inbox", "__forceErrorCode": "DUAL_WRITE_FAILED" }),
             &state,
-        );
+            service_state.service(),
+        )
+        .await;
 
         assert!(!envelope.ok);
         let error = envelope.error.expect("error should exist");

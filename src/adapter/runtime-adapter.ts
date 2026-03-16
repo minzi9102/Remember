@@ -274,15 +274,19 @@ function buildSuccessPayload(path: string): Record<string, unknown> {
     case "series.create":
       return { name: "Inbox" };
     case "series.list":
-      return { query: "", includeArchived: false, limit: 50 };
+      return { query: "", includeArchived: false, cursor: null, limit: 50 };
     case "commit.append":
-      return { seriesId: "series-inbox", content: "first-note" };
+      return {
+        seriesId: "series-inbox",
+        content: "first-note",
+        clientTs: "2026-03-16T00:00:00Z",
+      };
     case "timeline.list":
-      return { seriesId: "series-inbox", limit: 20 };
+      return { seriesId: "series-inbox", cursor: null, limit: 20 };
     case "series.archive":
       return { seriesId: "series-inbox" };
     case "series.scan_silent":
-      return { thresholdDays: 7 };
+      return { now: "2026-03-16T00:00:00Z", thresholdDays: 7 };
     default:
       return {};
   }
@@ -293,15 +297,15 @@ function buildFailPayload(path: string): Record<string, unknown> {
     case "series.create":
       return { name: "" };
     case "series.list":
-      return { limit: 0 };
+      return { query: "", includeArchived: false, cursor: null, limit: 0 };
     case "commit.append":
-      return { seriesId: "", content: "" };
+      return { seriesId: "", content: "", clientTs: "invalid-timestamp" };
     case "timeline.list":
-      return { seriesId: "" };
+      return { seriesId: "", cursor: null, limit: 20 };
     case "series.archive":
       return { seriesId: "" };
     case "series.scan_silent":
-      return { thresholdDays: 0 };
+      return { now: "invalid-timestamp", thresholdDays: 0 };
     default:
       return {};
   }
@@ -367,7 +371,10 @@ function mockDispatch(path: string, payload: Record<string, unknown>): RpcData {
       return data;
     }
     case "series.list": {
-      const limit = readOptionalPositiveInteger(payload, "limit") ?? 50;
+      const query = requireString(payload, "query");
+      const includeArchived = requireBoolean(payload, "includeArchived");
+      const cursor = requireNullableString(payload, "cursor");
+      const limit = requirePositiveInteger(payload, "limit");
       const data: SeriesListData = {
         items: [
           {
@@ -379,14 +386,16 @@ function mockDispatch(path: string, payload: Record<string, unknown>): RpcData {
             createdAt: "2026-03-15T00:00:00Z",
           },
         ],
-        nextCursor: null,
+        nextCursor: query.length > 0 ? null : cursor,
         limitEcho: limit,
       };
+      void includeArchived;
       return data;
     }
     case "commit.append": {
       const seriesId = requireNonEmptyString(payload, "seriesId");
       const content = requireNonEmptyString(payload, "content");
+      requireRfc3339String(payload, "clientTs");
       const data: CommitAppendData = {
         commit: {
           id: "stub-commit-001",
@@ -407,6 +416,8 @@ function mockDispatch(path: string, payload: Record<string, unknown>): RpcData {
     }
     case "timeline.list": {
       const seriesId = requireNonEmptyString(payload, "seriesId");
+      requireNullableString(payload, "cursor");
+      requirePositiveInteger(payload, "limit");
       const data: TimelineListData = {
         seriesId,
         items: [
@@ -430,7 +441,8 @@ function mockDispatch(path: string, payload: Record<string, unknown>): RpcData {
       return data;
     }
     case "series.scan_silent": {
-      const thresholdDays = readOptionalPositiveInteger(payload, "thresholdDays") ?? 7;
+      requireRfc3339String(payload, "now");
+      const thresholdDays = requirePositiveInteger(payload, "thresholdDays");
       const data: SeriesScanSilentData = {
         affectedSeriesIds: [],
         thresholdDays,
@@ -494,6 +506,85 @@ function requireNonEmptyString(payload: Record<string, unknown>, key: string): s
   }
 
   return raw.trim();
+}
+
+function requireString(payload: Record<string, unknown>, key: string): string {
+  const raw = payload[key];
+  if (typeof raw !== "string") {
+    throw {
+      code: VALIDATION_ERROR,
+      message: `field \`${key}\` is required and must be a string`,
+    };
+  }
+
+  return raw;
+}
+
+function requireBoolean(payload: Record<string, unknown>, key: string): boolean {
+  const raw = payload[key];
+  if (typeof raw !== "boolean") {
+    throw {
+      code: VALIDATION_ERROR,
+      message: `field \`${key}\` is required and must be a boolean`,
+    };
+  }
+
+  return raw;
+}
+
+function requireNullableString(payload: Record<string, unknown>, key: string): string | null {
+  if (!(key in payload)) {
+    throw {
+      code: VALIDATION_ERROR,
+      message: `field \`${key}\` is required and must be a string or null`,
+    };
+  }
+
+  const raw = payload[key];
+  if (raw === null) {
+    return null;
+  }
+
+  if (typeof raw !== "string") {
+    throw {
+      code: VALIDATION_ERROR,
+      message: `field \`${key}\` is required and must be a string or null`,
+    };
+  }
+
+  return raw.trim().length > 0 ? raw.trim() : null;
+}
+
+function requireRfc3339String(payload: Record<string, unknown>, key: string): string {
+  const raw = requireNonEmptyString(payload, key);
+  const timestamp = Date.parse(raw);
+  if (Number.isNaN(timestamp)) {
+    throw {
+      code: VALIDATION_ERROR,
+      message: `field \`${key}\` must be a valid RFC3339 timestamp`,
+    };
+  }
+
+  return raw;
+}
+
+function requirePositiveInteger(payload: Record<string, unknown>, key: string): number {
+  if (!(key in payload)) {
+    throw {
+      code: VALIDATION_ERROR,
+      message: `field \`${key}\` must be a positive integer`,
+    };
+  }
+
+  const value = readOptionalPositiveInteger(payload, key);
+  if (value === undefined) {
+    throw {
+      code: VALIDATION_ERROR,
+      message: `field \`${key}\` must be a positive integer`,
+    };
+  }
+
+  return value;
 }
 
 function readOptionalPositiveInteger(
