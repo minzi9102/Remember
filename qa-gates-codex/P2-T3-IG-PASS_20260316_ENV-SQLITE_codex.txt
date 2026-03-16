@@ -1,0 +1,150 @@
+case_id: P2-T3-IG-PASS
+输入动作 -> 可视反馈 -> 日志佐证 -> 结论
+
+[open] http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=series.create
+### Browser `P2T3-IG-PASS` opened with pid 16504.
+- P2T3-IG-PASS:
+  - browser-type: msedge
+  - user-data-dir: <in-memory>
+  - headed: false
+---
+### Ran Playwright code
+```js
+await page.goto('http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=series.create');
+```
+### Page
+- Page URL: http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=series.create
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-16T15-59-15-775Z.yml)
+[video-start]
+### Result
+Video recording started.
+[snapshot]
+### Page
+- Page URL: http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=series.create
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-16T15-59-18-868Z.yml)
+[probe]
+### Result
+{
+  "path": "series.create",
+  "ok": "true"
+}
+### Ran Playwright code
+```js
+await page.evaluate('() => ({ path: (document.body.innerText.match(/path:\\s*([^\\n]+)/)||[])[1] ?? "", ok: (document.body.innerText.match(/ok:\\s*(true|false)/)||[])[1] ?? "" })');
+```
+[goto] http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=commit.append
+### Ran Playwright code
+```js
+await page.goto('http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=commit.append');
+```
+### Page
+- Page URL: http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=commit.append
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-16T15-59-22-575Z.yml)
+[snapshot]
+### Page
+- Page URL: http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=commit.append
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-16T15-59-23-841Z.yml)
+[probe]
+### Result
+{
+  "path": "commit.append",
+  "ok": "true"
+}
+### Ran Playwright code
+```js
+await page.evaluate('() => ({ path: (document.body.innerText.match(/path:\\s*([^\\n]+)/)||[])[1] ?? "", ok: (document.body.innerText.match(/ok:\\s*(true|false)/)||[])[1] ?? "" })');
+```
+[goto] http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=series.list
+### Ran Playwright code
+```js
+await page.goto('http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=series.list');
+```
+### Page
+- Page URL: http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=series.list
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-16T15-59-27-602Z.yml)
+[snapshot]
+### Page
+- Page URL: http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=series.list
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-16T15-59-28-922Z.yml)
+[probe]
+### Result
+{
+  "path": "series.list",
+  "ok": "true"
+}
+### Ran Playwright code
+```js
+await page.evaluate('() => ({ path: (document.body.innerText.match(/path:\\s*([^\\n]+)/)||[])[1] ?? "", ok: (document.body.innerText.match(/ok:\\s*(true|false)/)||[])[1] ?? "" })');
+```
+[goto] http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=timeline.list
+### Ran Playwright code
+```js
+await page.goto('http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=timeline.list');
+```
+### Page
+- Page URL: http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=timeline.list
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-16T15-59-32-675Z.yml)
+[snapshot]
+### Page
+- Page URL: http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=timeline.list
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-16T15-59-34-483Z.yml)
+[probe]
+### Result
+{
+  "path": "timeline.list",
+  "ok": "true"
+}
+### Ran Playwright code
+```js
+await page.evaluate('() => ({ path: (document.body.innerText.match(/path:\\s*([^\\n]+)/)||[])[1] ?? "", ok: (document.body.innerText.match(/ok:\\s*(true|false)/)||[])[1] ?? "" })');
+```
+[goto] http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=series.archive
+### Ran Playwright code
+```js
+await page.goto('http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=series.archive');
+```
+### Page
+- Page URL: http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=series.archive
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-16T15-59-38-220Z.yml)
+[snapshot]
+### Page
+- Page URL: http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=series.archive
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-16T15-59-39-529Z.yml)
+[probe]
+### Result
+{
+  "path": "series.archive",
+  "ok": "true"
+}
+### Ran Playwright code
+```js
+await page.evaluate('() => ({ path: (document.body.innerText.match(/path:\\s*([^\\n]+)/)||[])[1] ?? "", ok: (document.body.innerText.match(/ok:\\s*(true|false)/)||[])[1] ?? "" })');
+```
+[video-stop] qa-gates-codex\P2-T3-IG-PASS_20260316_ENV-SQLITE_codex.mp4
+### Result
+- [Video](qa-gates-codex\P2-T3-IG-PASS_20260316_ENV-SQLITE_codex.mp4)
+[close]
+Browser 'P2T3-IG-PASS' closed
+
+
+结论: PASS（合法交互链路连续执行完成，过程中无卡死，结果均为 ok=true）

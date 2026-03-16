@@ -1,0 +1,80 @@
+case_id: P2-T3-VG-FAIL
+输入动作 -> 可视反馈 -> 日志佐证 -> 结论
+
+[open-fail] http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=commit.append&rpc_fail=1
+### Browser `P2T3-VG-FAIL` opened with pid 4780.
+- P2T3-VG-FAIL:
+  - browser-type: msedge
+  - user-data-dir: <in-memory>
+  - headed: false
+---
+### Ran Playwright code
+```js
+await page.goto('http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=commit.append&rpc_fail=1');
+```
+### Page
+- Page URL: http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=commit.append&rpc_fail=1
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-16T16-00-19-772Z.yml)
+[snapshot-fail]
+### Page
+- Page URL: http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=commit.append&rpc_fail=1
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-16T16-00-21-061Z.yml)
+[probe-fail]
+### Result
+{
+  "path": "commit.append",
+  "ok": "false",
+  "errorCode": ""
+}
+### Ran Playwright code
+```js
+await page.evaluate('() => ({ path: (document.body.innerText.match(/path:\\s*([^\\n]+)/)||[])[1] ?? "", ok: (document.body.innerText.match(/ok:\\s*(true|false)/)||[])[1] ?? "", errorCode: (document.body.innerText.match(/"code"\\s*:\\s*"([^"]+)"/)||[])[1] ?? "" })');
+```
+[screenshot-fail] qa-gates-codex\P2-T3-VG-FAIL_20260316_ENV-SQLITE_codex.png
+### Result
+- [Screenshot of full page](qa-gates-codex\P2-T3-VG-FAIL_20260316_ENV-SQLITE_codex.png)
+### Ran Playwright code
+```js
+// Screenshot full page and save it as qa-gates-codex\P2-T3-VG-FAIL_20260316_ENV-SQLITE_codex.png
+await page.screenshot({
+fullPage: true,
+  path: 'qa-gates-codex\\P2-T3-VG-FAIL_20260316_ENV-SQLITE_codex.png',
+  scale: 'css',
+  type: 'png'
+});
+```
+[goto-recover] http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=commit.append
+### Ran Playwright code
+```js
+await page.goto('http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=commit.append');
+```
+### Page
+- Page URL: http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=commit.append
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-16T16-00-27-256Z.yml)
+[snapshot-recover]
+### Page
+- Page URL: http://localhost:1420/?runtime_mode=sqlite_only&rpc_path=commit.append
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-16T16-00-28-662Z.yml)
+[probe-recover]
+### Result
+{
+  "path": "commit.append",
+  "ok": "true"
+}
+### Ran Playwright code
+```js
+await page.evaluate('() => ({ path: (document.body.innerText.match(/path:\\s*([^\\n]+)/)||[])[1] ?? "", ok: (document.body.innerText.match(/ok:\\s*(true|false)/)||[])[1] ?? "" })');
+```
+[close]
+Browser 'P2T3-VG-FAIL' closed
+
+
+结论: PASS（反向条件下出现明确失败反馈 ok=false，恢复后可继续正常操作 ok=true）

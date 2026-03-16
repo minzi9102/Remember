@@ -11,7 +11,7 @@
 | P1-T5 | phase-1/p1-t5-shared-dto.md | SeriesSummary/CommitItem | Phase 1 / 子任务 5 | 4 | TODO |
 | P2-T1 | phase-2/p2-t1-isomorphic-migrations.md | series/commits/consistency_alerts/app_settings | Phase 2 / 子任务 1 | 4 | TODO |
 | P2-T2 | phase-2/p2-t2-repository-implementations.md | SQLiteRepository/PostgresRepository | Phase 2 / 子任务 2 | 4 | TODO |
-| P2-T3 | phase-2/p2-t3-application-service-flow.md | Application Service | Phase 2 / 子任务 3 | 4 | TODO |
+| P2-T3 | phase-2/p2-t3-application-service-flow.md | Application Service | Phase 2 / 子任务 3 | 4 | PASS |
 | P2-T4 | phase-2/p2-t4-runtime-mode-injection.md | runtime_mode 注入 | Phase 2 / 子任务 4 | 4 | TODO |
 | P2-T5 | phase-2/p2-t5-basic-read-write-query.md | list/search/archive/timeline | Phase 2 / 子任务 5 | 4 | TODO |
 | P3-T1 | phase-3/p3-t1-dualsync-repository.md | DualSyncRepository | Phase 3 / 子任务 1 | 4 | TODO |

@@ -9,7 +9,7 @@
 | P1-T5 | `phase-1/p1-t5-shared-dto.md` | 1 | 4 | TODO |
 | P2-T1 | `phase-2/p2-t1-isomorphic-migrations.md` | 2 | 4 | TODO |
 | P2-T2 | `phase-2/p2-t2-repository-implementations.md` | 2 | 4 | TODO |
-| P2-T3 | `phase-2/p2-t3-application-service-flow.md` | 2 | 4 | TODO |
+| P2-T3 | `phase-2/p2-t3-application-service-flow.md` | 2 | 4 | PASS |
 | P2-T4 | `phase-2/p2-t4-runtime-mode-injection.md` | 2 | 4 | TODO |
 | P2-T5 | `phase-2/p2-t5-basic-read-write-query.md` | 2 | 4 | TODO |
 | P3-T1 | `phase-3/p3-t1-dualsync-repository.md` | 3 | 4 | TODO |
