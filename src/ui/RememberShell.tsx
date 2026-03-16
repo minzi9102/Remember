@@ -90,6 +90,9 @@ export function RememberShell({ shell }: RememberShellProps) {
         <pre className="command-meta" data-testid="command-envelope-meta">
           {JSON.stringify(shell.commandProbe.envelope.meta, null, 2)}
         </pre>
+        <pre className="command-meta" data-testid="command-envelope-data">
+          {JSON.stringify(shell.commandProbe.envelope.data ?? null, null, 2)}
+        </pre>
       </section>
 
       <section className="shell-grid">
@@ -98,8 +101,12 @@ export function RememberShell({ shell }: RememberShellProps) {
           <ul>
             {shell.seriesPreview.map((item) => (
               <li key={item.id}>
-                <div className="title">{item.name}</div>
-                <div className="meta">{item.latestExcerpt}</div>
+                <div className="title">
+                  {item.name} [{item.status}]
+                </div>
+                <div className="meta">
+                  {item.latestExcerpt} | updated: {item.lastUpdatedAt}
+                </div>
               </li>
             ))}
           </ul>
@@ -109,7 +116,7 @@ export function RememberShell({ shell }: RememberShellProps) {
           <h2>Timeline Preview</h2>
           <ul>
             {shell.timelinePreview.map((item) => (
-              <li key={`${item.createdAt}-${item.content}`}>
+              <li key={item.id}>
                 <div className="title">{item.createdAt}</div>
                 <div className="meta">{item.content}</div>
               </li>

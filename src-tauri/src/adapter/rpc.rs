@@ -1,10 +1,16 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{to_value, Value};
 use tauri::State;
 
-use crate::application::config::RuntimeConfigState;
+use crate::application::{
+    config::RuntimeConfigState,
+    dto::{
+        CommitAppendData, CommitItem, SeriesArchiveData, SeriesCreateData, SeriesListData,
+        SeriesScanSilentData, SeriesStatus, SeriesSummary, TimelineListData,
+    },
+};
 
 const VALIDATION_ERROR_CODE: &str = "VALIDATION_ERROR";
 const UNKNOWN_COMMAND_CODE: &str = "UNKNOWN_COMMAND";
@@ -218,34 +224,28 @@ fn dispatch(path: &str, payload: &Value) -> Result<Value, RpcError> {
 
 fn series_create(payload: &Value) -> Result<Value, RpcError> {
     let name = required_non_empty_string(payload, "name")?;
-    Ok(json!({
-        "series": {
-            "id": "stub-series-inbox",
-            "name": name,
-            "status": "active",
-            "lastUpdatedAt": "2026-03-16T00:00:00Z",
-            "latestExcerpt": "stubbed-command-shell",
-            "createdAt": "2026-03-16T00:00:00Z"
-        }
-    }))
+    serialize_data(SeriesCreateData {
+        series: build_series_summary(
+            "stub-series-inbox",
+            &name,
+            "stubbed-command-shell",
+            "2026-03-16T00:00:00Z",
+        ),
+    })
 }
 
 fn series_list(payload: &Value) -> Result<Value, RpcError> {
     let limit = optional_positive_u64(payload, "limit")?.unwrap_or(50);
-    Ok(json!({
-        "items": [
-            {
-                "id": "series-inbox",
-                "name": "Inbox",
-                "status": "active",
-                "lastUpdatedAt": "2026-03-16T00:00:00Z",
-                "latestExcerpt": "first-note",
-                "createdAt": "2026-03-15T00:00:00Z"
-            }
-        ],
-        "nextCursor": Value::Null,
-        "limitEcho": limit
-    }))
+    serialize_data(SeriesListData {
+        items: vec![build_series_summary(
+            "series-inbox",
+            "Inbox",
+            "first-note",
+            "2026-03-16T00:00:00Z",
+        )],
+        next_cursor: None,
+        limit_echo: limit,
+    })
 }
 
 fn commit_append(payload: &Value) -> Result<Value, RpcError> {
@@ -253,54 +253,75 @@ fn commit_append(payload: &Value) -> Result<Value, RpcError> {
     let content = required_non_empty_string(payload, "content")?;
     let latest_excerpt = excerpt(&content);
 
-    Ok(json!({
-        "commit": {
-            "id": "stub-commit-001",
-            "seriesId": series_id,
-            "content": content,
-            "createdAt": "2026-03-16T00:00:00Z"
+    serialize_data(CommitAppendData {
+        commit: CommitItem {
+            id: "stub-commit-001".to_string(),
+            series_id: series_id.clone(),
+            content,
+            created_at: "2026-03-16T00:00:00Z".to_string(),
         },
-        "series": {
-            "id": series_id,
-            "name": "Stub Series",
-            "status": "active",
-            "lastUpdatedAt": "2026-03-16T00:00:00Z",
-            "latestExcerpt": latest_excerpt,
-            "createdAt": "2026-03-15T00:00:00Z"
-        }
-    }))
+        series: build_series_summary(
+            &series_id,
+            "Stub Series",
+            &latest_excerpt,
+            "2026-03-16T00:00:00Z",
+        ),
+    })
 }
 
 fn timeline_list(payload: &Value) -> Result<Value, RpcError> {
     let series_id = required_non_empty_string(payload, "seriesId")?;
-    Ok(json!({
-        "seriesId": series_id,
-        "items": [
-            {
-                "id": "stub-commit-001",
-                "seriesId": series_id,
-                "content": "first-note",
-                "createdAt": "2026-03-16T00:00:00Z"
-            }
-        ],
-        "nextCursor": Value::Null
-    }))
+    serialize_data(TimelineListData {
+        series_id: series_id.clone(),
+        items: vec![CommitItem {
+            id: "stub-commit-001".to_string(),
+            series_id,
+            content: "first-note".to_string(),
+            created_at: "2026-03-16T00:00:00Z".to_string(),
+        }],
+        next_cursor: None,
+    })
 }
 
 fn series_archive(payload: &Value) -> Result<Value, RpcError> {
     let series_id = required_non_empty_string(payload, "seriesId")?;
-    Ok(json!({
-        "seriesId": series_id,
-        "archivedAt": "2026-03-16T00:00:00Z"
-    }))
+    serialize_data(SeriesArchiveData {
+        series_id,
+        archived_at: "2026-03-16T00:00:00Z".to_string(),
+    })
 }
 
 fn series_scan_silent(payload: &Value) -> Result<Value, RpcError> {
     let threshold_days = optional_positive_u64(payload, "thresholdDays")?.unwrap_or(7);
-    Ok(json!({
-        "affectedSeriesIds": [],
-        "thresholdDays": threshold_days
-    }))
+    serialize_data(SeriesScanSilentData {
+        affected_series_ids: Vec::new(),
+        threshold_days,
+    })
+}
+
+fn build_series_summary(
+    id: &str,
+    name: &str,
+    latest_excerpt: &str,
+    last_updated_at: &str,
+) -> SeriesSummary {
+    SeriesSummary {
+        id: id.to_string(),
+        name: name.to_string(),
+        status: SeriesStatus::Active,
+        last_updated_at: last_updated_at.to_string(),
+        latest_excerpt: latest_excerpt.to_string(),
+        created_at: "2026-03-15T00:00:00Z".to_string(),
+        archived_at: None,
+    }
+}
+
+fn serialize_data<T: Serialize>(data: T) -> Result<Value, RpcError> {
+    to_value(data).map_err(|error| {
+        RpcError::validation(format!(
+            "failed to serialize rpc response payload: {error}"
+        ))
+    })
 }
 
 fn required_non_empty_string(payload: &Value, key: &str) -> Result<String, RpcError> {
@@ -357,7 +378,90 @@ mod tests {
         assert!(envelope.error.is_none());
         assert_eq!(envelope.meta.path, "series.create");
         assert_eq!(envelope.meta.runtime_mode, "sqlite_only");
-        assert!(envelope.data.is_some());
+        let data = envelope
+            .data
+            .as_ref()
+            .and_then(|value| value.as_object())
+            .expect("data should be an object");
+        let series = data
+            .get("series")
+            .and_then(|value| value.as_object())
+            .expect("series should exist");
+
+        assert_eq!(series.get("id").and_then(|value| value.as_str()), Some("stub-series-inbox"));
+        assert_eq!(series.get("name").and_then(|value| value.as_str()), Some("Inbox"));
+        assert_eq!(series.get("status").and_then(|value| value.as_str()), Some("active"));
+        assert!(series.contains_key("lastUpdatedAt"));
+        assert!(series.contains_key("latestExcerpt"));
+        assert!(series.contains_key("createdAt"));
+    }
+
+    #[test]
+    fn returns_commit_item_fields_for_commit_append() {
+        let state = test_state();
+        let envelope = handle_rpc(
+            "commit.append",
+            serde_json::json!({ "seriesId": "series-inbox", "content": "first-note" }),
+            &state,
+        );
+
+        assert!(envelope.ok);
+        let data = envelope
+            .data
+            .as_ref()
+            .and_then(|value| value.as_object())
+            .expect("data should be an object");
+        let commit = data
+            .get("commit")
+            .and_then(|value| value.as_object())
+            .expect("commit should exist");
+
+        assert_eq!(commit.get("id").and_then(|value| value.as_str()), Some("stub-commit-001"));
+        assert_eq!(
+            commit.get("seriesId").and_then(|value| value.as_str()),
+            Some("series-inbox")
+        );
+        assert_eq!(
+            commit.get("content").and_then(|value| value.as_str()),
+            Some("first-note")
+        );
+        assert!(commit.contains_key("createdAt"));
+    }
+
+    #[test]
+    fn returns_commit_items_for_timeline_list() {
+        let state = test_state();
+        let envelope = handle_rpc(
+            "timeline.list",
+            serde_json::json!({ "seriesId": "series-inbox" }),
+            &state,
+        );
+
+        assert!(envelope.ok);
+        let data = envelope
+            .data
+            .as_ref()
+            .and_then(|value| value.as_object())
+            .expect("data should be an object");
+        assert_eq!(
+            data.get("seriesId").and_then(|value| value.as_str()),
+            Some("series-inbox")
+        );
+        let items = data
+            .get("items")
+            .and_then(|value| value.as_array())
+            .expect("items should exist");
+        let first_item = items
+            .first()
+            .and_then(|value| value.as_object())
+            .expect("first timeline item should be object");
+        assert_eq!(
+            first_item.get("seriesId").and_then(|value| value.as_str()),
+            Some("series-inbox")
+        );
+        assert!(first_item.contains_key("id"));
+        assert!(first_item.contains_key("content"));
+        assert!(first_item.contains_key("createdAt"));
     }
 
     #[test]

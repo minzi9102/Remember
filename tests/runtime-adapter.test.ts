@@ -65,6 +65,69 @@ describe("runtime-adapter command envelope probe", () => {
     expect(probe.envelope.ok).toBe(true);
     expect(probe.envelope.meta.runtimeMode).toBe("dual_sync");
     expect(probe.envelope.meta.path).toBe("series.create");
+    expect(probe.envelope.data).toMatchObject({
+      series: {
+        id: "stub-series-inbox",
+        name: "Inbox",
+        status: "active",
+      },
+    });
+  });
+
+  it("returns DTO fields for series.list", () => {
+    const probe = readMockCommandProbe("?runtime_mode=sqlite_only&rpc_path=series.list");
+
+    expect(probe.envelope.ok).toBe(true);
+    expect(probe.envelope.data).toMatchObject({
+      items: [
+        {
+          id: "series-inbox",
+          name: "Inbox",
+          status: "active",
+          lastUpdatedAt: "2026-03-16T00:00:00Z",
+          latestExcerpt: "first-note",
+          createdAt: "2026-03-15T00:00:00Z",
+        },
+      ],
+      nextCursor: null,
+      limitEcho: 50,
+    });
+  });
+
+  it("returns DTO fields for commit.append", () => {
+    const probe = readMockCommandProbe("?runtime_mode=sqlite_only&rpc_path=commit.append");
+
+    expect(probe.envelope.ok).toBe(true);
+    expect(probe.envelope.data).toMatchObject({
+      commit: {
+        id: "stub-commit-001",
+        seriesId: "series-inbox",
+        content: "first-note",
+      },
+      series: {
+        id: "series-inbox",
+        name: "Stub Series",
+        status: "active",
+      },
+    });
+  });
+
+  it("returns DTO fields for timeline.list", () => {
+    const probe = readMockCommandProbe("?runtime_mode=sqlite_only&rpc_path=timeline.list");
+
+    expect(probe.envelope.ok).toBe(true);
+    expect(probe.envelope.data).toMatchObject({
+      seriesId: "series-inbox",
+      items: [
+        {
+          id: "stub-commit-001",
+          seriesId: "series-inbox",
+          content: "first-note",
+          createdAt: "2026-03-16T00:00:00Z",
+        },
+      ],
+      nextCursor: null,
+    });
   });
 
   it("returns validation error when rpc_fail is enabled", () => {

@@ -2,7 +2,7 @@
 {"task_name":"建立 `config.toml` 读取与运行模式解析。","completed":true}
 {"task_name":"创建命令壳并返回统一 envelope。","completed":true}
 {"task_name":"接入 `tracing` 与错误码映射。","completed":true}
-{"task_name":"定义共享 DTO（`SeriesSummary`、`CommitItem` 等）。","completed":false}
+{"task_name":"定义共享 DTO（`SeriesSummary`、`CommitItem` 等）。","completed":true}
 {"task_name":"实现 SQLite/Postgres 同构 migration。","completed":false}
 {"task_name":"定义并实现 Repository Trait 与两个后端。","completed":false}
 {"task_name":"完成 Application Service（创建系列、提交、列表、时间线、归档、搜索）。","completed":false}

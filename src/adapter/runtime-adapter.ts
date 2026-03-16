@@ -1,9 +1,16 @@
 import type {
+  CommitAppendData,
   CommandProbe,
   LayerState,
+  RpcData,
   RpcEnvelope,
   RuntimeMode,
   RuntimeStatus,
+  SeriesArchiveData,
+  SeriesCreateData,
+  SeriesListData,
+  SeriesScanSilentData,
+  TimelineListData,
 } from "../application/types";
 
 export interface AdapterSnapshot {
@@ -304,7 +311,7 @@ function mockInvoke(
   path: string,
   payload: Record<string, unknown>,
   runtimeStatus: RuntimeStatus,
-): RpcEnvelope {
+): RpcEnvelope<RpcData> {
   const meta = {
     path,
     runtimeMode: runtimeStatus.mode,
@@ -338,7 +345,7 @@ function mockInvoke(
   }
 }
 
-function mockDispatch(path: string, payload: Record<string, unknown>): Record<string, unknown> {
+function mockDispatch(path: string, payload: Record<string, unknown>): RpcData {
   const forcedError = readForcedRpcError(payload);
   if (forcedError !== null) {
     throw forcedError;
@@ -347,20 +354,21 @@ function mockDispatch(path: string, payload: Record<string, unknown>): Record<st
   switch (path) {
     case "series.create": {
       const name = requireNonEmptyString(payload, "name");
-      return {
+      const data: SeriesCreateData = {
         series: {
           id: "stub-series-inbox",
           name,
           status: "active",
           lastUpdatedAt: "2026-03-16T00:00:00Z",
           latestExcerpt: "stubbed-command-shell",
-          createdAt: "2026-03-16T00:00:00Z",
+          createdAt: "2026-03-15T00:00:00Z",
         },
       };
+      return data;
     }
     case "series.list": {
       const limit = readOptionalPositiveInteger(payload, "limit") ?? 50;
-      return {
+      const data: SeriesListData = {
         items: [
           {
             id: "series-inbox",
@@ -374,11 +382,12 @@ function mockDispatch(path: string, payload: Record<string, unknown>): Record<st
         nextCursor: null,
         limitEcho: limit,
       };
+      return data;
     }
     case "commit.append": {
       const seriesId = requireNonEmptyString(payload, "seriesId");
       const content = requireNonEmptyString(payload, "content");
-      return {
+      const data: CommitAppendData = {
         commit: {
           id: "stub-commit-001",
           seriesId,
@@ -390,14 +399,15 @@ function mockDispatch(path: string, payload: Record<string, unknown>): Record<st
           name: "Stub Series",
           status: "active",
           lastUpdatedAt: "2026-03-16T00:00:00Z",
-          latestExcerpt: content,
+          latestExcerpt: buildExcerpt(content),
           createdAt: "2026-03-15T00:00:00Z",
         },
       };
+      return data;
     }
     case "timeline.list": {
       const seriesId = requireNonEmptyString(payload, "seriesId");
-      return {
+      const data: TimelineListData = {
         seriesId,
         items: [
           {
@@ -409,20 +419,23 @@ function mockDispatch(path: string, payload: Record<string, unknown>): Record<st
         ],
         nextCursor: null,
       };
+      return data;
     }
     case "series.archive": {
       const seriesId = requireNonEmptyString(payload, "seriesId");
-      return {
+      const data: SeriesArchiveData = {
         seriesId,
         archivedAt: "2026-03-16T00:00:00Z",
       };
+      return data;
     }
     case "series.scan_silent": {
       const thresholdDays = readOptionalPositiveInteger(payload, "thresholdDays") ?? 7;
-      return {
+      const data: SeriesScanSilentData = {
         affectedSeriesIds: [],
         thresholdDays,
       };
+      return data;
     }
     default:
       throw {
@@ -430,6 +443,14 @@ function mockDispatch(path: string, payload: Record<string, unknown>): Record<st
         message: `unknown rpc path \`${path}\``,
       };
   }
+}
+
+function buildExcerpt(content: string): string {
+  if (content.length <= 48) {
+    return content;
+  }
+
+  return `${content.slice(0, 48)}...`;
 }
 
 function readForcedRpcError(payload: Record<string, unknown>): { code: string; message: string } | null {

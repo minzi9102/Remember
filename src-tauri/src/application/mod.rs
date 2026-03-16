@@ -1,4 +1,5 @@
 pub mod config;
+pub mod dto;
 
 use tauri::{AppHandle, Manager, Runtime};
 

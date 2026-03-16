@@ -1,6 +1,7 @@
 export type LayerState = "ready" | "stubbed";
 export type RuntimeMode = "sqlite_only" | "postgres_only" | "dual_sync";
 export type RuntimeSource = "native" | "mock";
+export type SeriesStatus = "active" | "silent" | "archived";
 
 export interface LayerHealth {
   adapter: LayerState;
@@ -27,7 +28,63 @@ export interface RpcMeta {
   respondedAtUnixMs: number;
 }
 
-export interface RpcEnvelope<T = Record<string, unknown>> {
+export interface SeriesSummary {
+  id: string;
+  name: string;
+  status: SeriesStatus;
+  lastUpdatedAt: string;
+  latestExcerpt: string;
+  createdAt: string;
+  archivedAt?: string;
+}
+
+export interface CommitItem {
+  id: string;
+  seriesId: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface SeriesCreateData {
+  series: SeriesSummary;
+}
+
+export interface SeriesListData {
+  items: SeriesSummary[];
+  nextCursor: string | null;
+  limitEcho: number;
+}
+
+export interface CommitAppendData {
+  commit: CommitItem;
+  series: SeriesSummary;
+}
+
+export interface TimelineListData {
+  seriesId: string;
+  items: CommitItem[];
+  nextCursor: string | null;
+}
+
+export interface SeriesArchiveData {
+  seriesId: string;
+  archivedAt: string;
+}
+
+export interface SeriesScanSilentData {
+  affectedSeriesIds: string[];
+  thresholdDays: number;
+}
+
+export type RpcData =
+  | SeriesCreateData
+  | SeriesListData
+  | CommitAppendData
+  | TimelineListData
+  | SeriesArchiveData
+  | SeriesScanSilentData;
+
+export interface RpcEnvelope<T = RpcData> {
   ok: boolean;
   data?: T;
   error?: RpcError;
@@ -40,23 +97,12 @@ export interface CommandProbe {
   envelope: RpcEnvelope;
 }
 
-export interface SeriesPreview {
-  id: string;
-  name: string;
-  latestExcerpt: string;
-}
-
-export interface TimelinePreviewItem {
-  createdAt: string;
-  content: string;
-}
-
 export interface ShellState {
   appTitle: string;
   subtitle: string;
   layers: LayerHealth;
   runtimeStatus: RuntimeStatus;
   commandProbe: CommandProbe;
-  seriesPreview: SeriesPreview[];
-  timelinePreview: TimelinePreviewItem[];
+  seriesPreview: SeriesSummary[];
+  timelinePreview: CommitItem[];
 }
