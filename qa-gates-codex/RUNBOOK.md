@@ -41,3 +41,8 @@ powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\screens
 1. 立即 `playwright-cli close`
 2. 保留当前截图、日志、复现步骤
 3. 用 `BLOCKED` 或 `FAIL` 更新矩阵并记录原因
+
+## 6) P1-T2 双轨补充
+1. `VG` 用例优先 `web_url`，通过 URL 参数注入 `runtime_mode` 与 `warning` 做页面可视判定。
+2. `IG` 用例必须走 `desktop_window`，以修改 `config.toml + 重启` 验证真实生效链路。
+3. 文本证据固定结构：`输入动作 -> 可视反馈 -> 日志佐证 -> 结论`。

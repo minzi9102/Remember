@@ -4,6 +4,17 @@ interface RememberShellProps {
   shell: ShellState;
 }
 
+export function RememberShellLoading() {
+  return (
+    <main className="remember-shell remember-shell-loading" data-testid="remember-shell-loading">
+      <header className="shell-header">
+        <h1>Remember</h1>
+        <p data-testid="runtime-loading-text">Loading runtime diagnostics...</p>
+      </header>
+    </main>
+  );
+}
+
 export function RememberShell({ shell }: RememberShellProps) {
   return (
     <main className="remember-shell" data-testid="remember-shell">
@@ -17,6 +28,36 @@ export function RememberShell({ shell }: RememberShellProps) {
           <span>Repository: {shell.layers.repository}</span>
         </div>
       </header>
+
+      <section className="runtime-diagnostics panel" data-testid="runtime-diagnostics">
+        <h2>Runtime Mode</h2>
+        <div className="runtime-tags">
+          <span className="runtime-tag mode" data-testid="runtime-mode-badge">
+            mode: {shell.runtimeStatus.mode}
+          </span>
+          <span className="runtime-tag source" data-testid="runtime-source-badge">
+            source: {shell.runtimeStatus.source}
+          </span>
+          <span className="runtime-tag fallback" data-testid="runtime-fallback-badge">
+            fallback: {shell.runtimeStatus.usedFallback ? "on" : "off"}
+          </span>
+        </div>
+
+        {shell.runtimeStatus.warnings.length > 0 ? (
+          <div className="config-warning-banner" data-testid="config-warning-banner">
+            <strong>Config warning</strong>
+            <ul>
+              {shell.runtimeStatus.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="config-ok" data-testid="config-ok-banner">
+            No runtime warnings.
+          </p>
+        )}
+      </section>
 
       <section className="shell-grid">
         <article className="panel">

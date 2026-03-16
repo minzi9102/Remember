@@ -1,17 +1,18 @@
 import { readAdapterSnapshot } from "../adapter/runtime-adapter";
 import type { ShellState } from "./types";
 
-export function bootstrapShell(): ShellState {
-  const snapshot = readAdapterSnapshot();
+export async function bootstrapShell(): Promise<ShellState> {
+  const snapshot = await readAdapterSnapshot();
 
   return {
     appTitle: "Remember",
-    subtitle: "Phase 1 Task 1 - Layered Skeleton",
+    subtitle: "Phase 1 Task 2 - Config Runtime Mode",
     layers: {
       adapter: snapshot.adapter,
       application: "ready",
       repository: snapshot.repository,
     },
+    runtimeStatus: snapshot.runtimeStatus,
     seriesPreview: [
       { id: "series-inbox", name: "Inbox", latestExcerpt: "first-note" },
       { id: "series-project-a", name: "Project-A", latestExcerpt: "follow-up-note" },
