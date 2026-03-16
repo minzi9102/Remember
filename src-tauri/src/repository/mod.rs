@@ -1,3 +1,5 @@
+pub mod migrations;
+
 use crate::application::config::RuntimeMode;
 
 #[derive(Debug, Clone)]
