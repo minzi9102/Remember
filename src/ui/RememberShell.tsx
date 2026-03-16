@@ -59,6 +59,39 @@ export function RememberShell({ shell }: RememberShellProps) {
         )}
       </section>
 
+      <section className="command-diagnostics panel" data-testid="command-envelope-panel">
+        <h2>Command Envelope</h2>
+        <div className="runtime-tags">
+          <span className="runtime-tag mode" data-testid="command-envelope-path">
+            path: {shell.commandProbe.path}
+          </span>
+          <span className="runtime-tag source" data-testid="command-envelope-source">
+            source: {shell.commandProbe.source}
+          </span>
+          <span className="runtime-tag fallback" data-testid="command-envelope-ok">
+            ok: {shell.commandProbe.envelope.ok ? "true" : "false"}
+          </span>
+        </div>
+
+        {shell.commandProbe.envelope.ok ? (
+          <p className="config-ok" data-testid="command-envelope-success">
+            envelope success with data payload.
+          </p>
+        ) : (
+          <div className="config-warning-banner" data-testid="command-envelope-error">
+            <strong>Command error</strong>
+            <p data-testid="command-envelope-error-code">
+              code: {shell.commandProbe.envelope.error?.code ?? "UNKNOWN"}
+            </p>
+            <p>{shell.commandProbe.envelope.error?.message ?? "No error message."}</p>
+          </div>
+        )}
+
+        <pre className="command-meta" data-testid="command-envelope-meta">
+          {JSON.stringify(shell.commandProbe.envelope.meta, null, 2)}
+        </pre>
+      </section>
+
       <section className="shell-grid">
         <article className="panel">
           <h2>Series List Preview</h2>

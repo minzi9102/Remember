@@ -15,6 +15,31 @@ export interface RuntimeStatus {
   source: RuntimeSource;
 }
 
+export interface RpcError {
+  code: string;
+  message: string;
+}
+
+export interface RpcMeta {
+  path: string;
+  runtimeMode: RuntimeMode;
+  usedFallback: boolean;
+  respondedAtUnixMs: number;
+}
+
+export interface RpcEnvelope<T = Record<string, unknown>> {
+  ok: boolean;
+  data?: T;
+  error?: RpcError;
+  meta: RpcMeta;
+}
+
+export interface CommandProbe {
+  source: RuntimeSource;
+  path: string;
+  envelope: RpcEnvelope;
+}
+
 export interface SeriesPreview {
   id: string;
   name: string;
@@ -31,6 +56,7 @@ export interface ShellState {
   subtitle: string;
   layers: LayerHealth;
   runtimeStatus: RuntimeStatus;
+  commandProbe: CommandProbe;
   seriesPreview: SeriesPreview[];
   timelinePreview: TimelinePreviewItem[];
 }

@@ -72,6 +72,10 @@
   margin-bottom: 16px;
 }
 
+.command-diagnostics {
+  margin-bottom: 16px;
+}
+
 .runtime-tags {
   display: flex;
   flex-wrap: wrap;
@@ -128,6 +132,17 @@
   border: 1px solid #86efac;
   border-radius: 10px;
   padding: 8px 10px;
+}
+
+.command-meta {
+  margin: 10px 0 0;
+  border: 1px solid #dbe3ff;
+  border-radius: 10px;
+  background: #f8faff;
+  color: #334155;
+  font-size: 12px;
+  padding: 8px 10px;
+  overflow-x: auto;
 }
 
 .panel {

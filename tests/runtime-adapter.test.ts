@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseMockRuntimeStatus,
   parseNativeRuntimeStatusFromTitle,
+  readMockCommandProbe,
 } from "../src/adapter/runtime-adapter";
 
 describe("runtime-adapter mock parser", () => {
@@ -52,5 +53,31 @@ describe("runtime-adapter native title parser", () => {
     expect(status.mode).toBe("sqlite_only");
     expect(status.usedFallback).toBe(true);
     expect(status.warnings).toContain("native runtime reports CONFIG_FALLBACK");
+  });
+});
+
+describe("runtime-adapter command envelope probe", () => {
+  it("returns success envelope in mock mode by default", () => {
+    const probe = readMockCommandProbe("?runtime_mode=dual_sync");
+
+    expect(probe.path).toBe("series.create");
+    expect(probe.source).toBe("mock");
+    expect(probe.envelope.ok).toBe(true);
+    expect(probe.envelope.meta.runtimeMode).toBe("dual_sync");
+    expect(probe.envelope.meta.path).toBe("series.create");
+  });
+
+  it("returns validation error when rpc_fail is enabled", () => {
+    const probe = readMockCommandProbe("?runtime_mode=sqlite_only&rpc_fail=1");
+
+    expect(probe.envelope.ok).toBe(false);
+    expect(probe.envelope.error?.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns unknown command error for unsupported path", () => {
+    const probe = readMockCommandProbe("?runtime_mode=sqlite_only&rpc_path=series.unknown");
+
+    expect(probe.envelope.ok).toBe(false);
+    expect(probe.envelope.error?.code).toBe("UNKNOWN_COMMAND");
   });
 });

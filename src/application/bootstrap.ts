@@ -6,13 +6,14 @@ export async function bootstrapShell(): Promise<ShellState> {
 
   return {
     appTitle: "Remember",
-    subtitle: "Phase 1 Task 2 - Config Runtime Mode",
+    subtitle: "Phase 1 Task 3 - Command Envelope Shell",
     layers: {
       adapter: snapshot.adapter,
       application: "ready",
       repository: snapshot.repository,
     },
     runtimeStatus: snapshot.runtimeStatus,
+    commandProbe: snapshot.commandProbe,
     seriesPreview: [
       { id: "series-inbox", name: "Inbox", latestExcerpt: "first-note" },
       { id: "series-project-a", name: "Project-A", latestExcerpt: "follow-up-note" },

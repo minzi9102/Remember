@@ -1,6 +1,6 @@
 {"task_name":"初始化项目与目录分层（UI/Adapter/Application/Repository）。","completed":true}
 {"task_name":"建立 `config.toml` 读取与运行模式解析。","completed":true}
-{"task_name":"创建命令壳并返回统一 envelope。","completed":false}
+{"task_name":"创建命令壳并返回统一 envelope。","completed":true}
 {"task_name":"接入 `tracing` 与错误码映射。","completed":false}
 {"task_name":"定义共享 DTO（`SeriesSummary`、`CommitItem` 等）。","completed":false}
 {"task_name":"实现 SQLite/Postgres 同构 migration。","completed":false}
