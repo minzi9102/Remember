@@ -7,21 +7,24 @@ use crate::repository::RepositoryLayer;
 
 pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) {
     let config_report = load_from_app_data(app);
-    println!(
-        "[remember][config] loaded from={} runtime_mode={} warnings={}",
-        config_report.config_path.display(),
-        config_report.config.runtime_mode,
-        config_report.warnings.len()
+    tracing::info!(
+        component = "config",
+        config_path = %config_report.config_path.display(),
+        runtime_mode = %config_report.config.runtime_mode,
+        warning_count = config_report.warnings.len(),
+        used_fallback = config_report.used_fallback,
+        "runtime config loaded"
     );
 
     for warning in &config_report.warnings {
-        eprintln!("[remember][config][warning] {warning}");
+        tracing::warn!(component = "config", warning = %warning, "runtime config warning");
     }
 
     let repository = RepositoryLayer::new(config_report.config.runtime_mode.clone());
-    println!(
-        "[remember][repository] initialized runtime_mode={}",
-        repository.runtime_mode().as_config_value()
+    tracing::info!(
+        component = "repository",
+        runtime_mode = repository.runtime_mode().as_config_value(),
+        "repository layer initialized"
     );
     app.manage(repository);
     app.manage(RuntimeConfigState::from(config_report));
@@ -39,18 +42,26 @@ fn update_main_window_title<R: Runtime>(app: &AppHandle<R>) {
     );
     if config_state.used_fallback {
         title.push_str(" [CONFIG_FALLBACK]");
-        eprintln!(
-            "[remember][config][warning] fallback mode in effect path={} warnings={}",
-            config_state.config_path.display(),
-            config_state.warnings.len()
+        tracing::warn!(
+            component = "config",
+            config_path = %config_state.config_path.display(),
+            warning_count = config_state.warnings.len(),
+            "fallback mode in effect"
         );
     }
 
     if let Some(window) = app.get_webview_window("main") {
         if let Err(error) = window.set_title(&title) {
-            eprintln!("[remember][config][warning] failed to set window title: {error}");
+            tracing::warn!(
+                component = "config",
+                error = %error,
+                "failed to set main window title"
+            );
         }
     } else {
-        eprintln!("[remember][config][warning] main window not found when setting mode title");
+        tracing::warn!(
+            component = "config",
+            "main window not found when setting runtime mode title"
+        );
     }
 }

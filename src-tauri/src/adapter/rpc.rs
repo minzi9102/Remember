@@ -8,6 +8,9 @@ use crate::application::config::RuntimeConfigState;
 
 const VALIDATION_ERROR_CODE: &str = "VALIDATION_ERROR";
 const UNKNOWN_COMMAND_CODE: &str = "UNKNOWN_COMMAND";
+const PG_TIMEOUT_CODE: &str = "PG_TIMEOUT";
+const DUAL_WRITE_FAILED_CODE: &str = "DUAL_WRITE_FAILED";
+const FORCE_ERROR_CODE_FIELD: &str = "__forceErrorCode";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,6 +39,14 @@ pub struct RpcMeta {
     pub responded_at_unix_ms: u128,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum RpcErrorKind {
+    Validation,
+    UnknownCommand,
+    PgTimeout,
+    DualWriteFailed,
+}
+
 #[tauri::command]
 pub(crate) fn rpc_invoke(
     path: String,
@@ -50,9 +61,44 @@ pub(crate) fn rpc_invoke(
 }
 
 pub(crate) fn handle_rpc(path: &str, payload: Value, config_state: &RuntimeConfigState) -> RpcEnvelope {
-    match dispatch(path, &payload) {
-        Ok(data) => RpcEnvelope::success(path, config_state, data),
-        Err(error) => RpcEnvelope::failure(path, config_state, error),
+    tracing::debug!(
+        component = "rpc",
+        path,
+        runtime_mode = %config_state.config.runtime_mode,
+        used_fallback = config_state.used_fallback,
+        "rpc invoke received"
+    );
+
+    let dispatch_result = match resolve_forced_error(&payload) {
+        Ok(Some(error)) => {
+            tracing::warn!(
+                component = "rpc",
+                path,
+                code = error.code,
+                message = %error.message,
+                "forced rpc error injected"
+            );
+            Err(error)
+        }
+        Ok(None) => dispatch(path, &payload),
+        Err(error) => Err(error),
+    };
+
+    match dispatch_result {
+        Ok(data) => {
+            tracing::info!(component = "rpc", path, "rpc invoke succeeded");
+            RpcEnvelope::success(path, config_state, data)
+        }
+        Err(error) => {
+            tracing::warn!(
+                component = "rpc",
+                path,
+                code = error.code,
+                message = %error.message,
+                "rpc invoke failed"
+            );
+            RpcEnvelope::failure(path, config_state, error)
+        }
     }
 }
 
@@ -76,19 +122,42 @@ impl RpcEnvelope {
     }
 }
 
+impl RpcErrorKind {
+    fn as_code(self) -> &'static str {
+        match self {
+            Self::Validation => VALIDATION_ERROR_CODE,
+            Self::UnknownCommand => UNKNOWN_COMMAND_CODE,
+            Self::PgTimeout => PG_TIMEOUT_CODE,
+            Self::DualWriteFailed => DUAL_WRITE_FAILED_CODE,
+        }
+    }
+}
+
 impl RpcError {
-    fn validation(message: impl Into<String>) -> Self {
+    fn from_kind(kind: RpcErrorKind, message: impl Into<String>) -> Self {
         Self {
-            code: VALIDATION_ERROR_CODE,
+            code: kind.as_code(),
             message: message.into(),
         }
     }
 
+    fn validation(message: impl Into<String>) -> Self {
+        Self::from_kind(RpcErrorKind::Validation, message)
+    }
+
     fn unknown_path(path: &str) -> Self {
-        Self {
-            code: UNKNOWN_COMMAND_CODE,
-            message: format!("unknown rpc path `{path}`"),
-        }
+        Self::from_kind(
+            RpcErrorKind::UnknownCommand,
+            format!("unknown rpc path `{path}`"),
+        )
+    }
+
+    fn pg_timeout(message: impl Into<String>) -> Self {
+        Self::from_kind(RpcErrorKind::PgTimeout, message)
+    }
+
+    fn dual_write_failed(message: impl Into<String>) -> Self {
+        Self::from_kind(RpcErrorKind::DualWriteFailed, message)
     }
 }
 
@@ -105,6 +174,34 @@ fn current_unix_ms() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_millis())
+}
+
+fn resolve_forced_error(payload: &Value) -> Result<Option<RpcError>, RpcError> {
+    let Some(raw_code) = payload
+        .as_object()
+        .and_then(|object| object.get(FORCE_ERROR_CODE_FIELD))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(None);
+    };
+
+    let normalized = raw_code.to_ascii_uppercase();
+    let forced_error = match normalized.as_str() {
+        PG_TIMEOUT_CODE => RpcError::pg_timeout("simulated postgres timeout for diagnostics"),
+        DUAL_WRITE_FAILED_CODE => {
+            RpcError::dual_write_failed("simulated dual write failure for diagnostics")
+        }
+        VALIDATION_ERROR_CODE => RpcError::validation("simulated validation error for diagnostics"),
+        _ => {
+            return Err(RpcError::validation(format!(
+                "field `{FORCE_ERROR_CODE_FIELD}` must be one of {PG_TIMEOUT_CODE}, {DUAL_WRITE_FAILED_CODE}, {VALIDATION_ERROR_CODE}"
+            )))
+        }
+    };
+
+    Ok(Some(forced_error))
 }
 
 fn dispatch(path: &str, payload: &Value) -> Result<Value, RpcError> {
@@ -245,7 +342,10 @@ fn excerpt(content: &str) -> String {
 mod tests {
     use std::path::PathBuf;
 
-    use super::{handle_rpc, UNKNOWN_COMMAND_CODE, VALIDATION_ERROR_CODE};
+    use super::{
+        handle_rpc, DUAL_WRITE_FAILED_CODE, PG_TIMEOUT_CODE, UNKNOWN_COMMAND_CODE,
+        VALIDATION_ERROR_CODE,
+    };
     use crate::application::config::{AppConfig, RuntimeConfigState, RuntimeMode};
 
     #[test]
@@ -278,6 +378,34 @@ mod tests {
         assert!(!envelope.ok);
         let error = envelope.error.expect("error should exist");
         assert_eq!(error.code, UNKNOWN_COMMAND_CODE);
+    }
+
+    #[test]
+    fn returns_pg_timeout_error_when_forced() {
+        let state = test_state();
+        let envelope = handle_rpc(
+            "series.create",
+            serde_json::json!({ "name": "Inbox", "__forceErrorCode": "PG_TIMEOUT" }),
+            &state,
+        );
+
+        assert!(!envelope.ok);
+        let error = envelope.error.expect("error should exist");
+        assert_eq!(error.code, PG_TIMEOUT_CODE);
+    }
+
+    #[test]
+    fn returns_dual_write_failed_error_when_forced() {
+        let state = test_state();
+        let envelope = handle_rpc(
+            "series.create",
+            serde_json::json!({ "name": "Inbox", "__forceErrorCode": "DUAL_WRITE_FAILED" }),
+            &state,
+        );
+
+        assert!(!envelope.ok);
+        let error = envelope.error.expect("error should exist");
+        assert_eq!(error.code, DUAL_WRITE_FAILED_CODE);
     }
 
     fn test_state() -> RuntimeConfigState {

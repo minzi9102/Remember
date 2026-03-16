@@ -19,7 +19,10 @@ const FALLBACK_PATTERN = /\[CONFIG_FALLBACK\]/;
 const DEFAULT_PROBE_PATH = "series.create";
 const VALIDATION_ERROR = "VALIDATION_ERROR";
 const UNKNOWN_COMMAND = "UNKNOWN_COMMAND";
+const PG_TIMEOUT = "PG_TIMEOUT";
+const DUAL_WRITE_FAILED = "DUAL_WRITE_FAILED";
 const INVOKE_FAILED = "INVOKE_FAILED";
+const FORCE_ERROR_CODE_FIELD = "__forceErrorCode";
 
 export function parseMockRuntimeStatus(search: string): RuntimeStatus {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
@@ -207,10 +210,19 @@ function buildProbeRequest(search: string): { path: string; payload: Record<stri
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const path = normalizeProbePath(params.get("rpc_path"));
   const forceFail = isTruthy(params.get("rpc_fail"));
+  const forceErrorCode = parseForcedErrorCode(params.get("rpc_error"));
+  const basePayload = forceFail ? buildFailPayload(path) : buildSuccessPayload(path);
+  const payload =
+    forceErrorCode === null
+      ? basePayload
+      : {
+          ...basePayload,
+          [FORCE_ERROR_CODE_FIELD]: forceErrorCode,
+        };
 
   return {
     path,
-    payload: forceFail ? buildFailPayload(path) : buildSuccessPayload(path),
+    payload,
   };
 }
 
@@ -230,6 +242,24 @@ function isTruthy(raw: string | null): boolean {
 
   const normalized = raw.trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+function parseForcedErrorCode(raw: string | null): string | null {
+  if (raw === null) {
+    return null;
+  }
+
+  const normalized = raw.trim().toLowerCase();
+  switch (normalized) {
+    case "pg_timeout":
+      return PG_TIMEOUT;
+    case "dual_write_failed":
+      return DUAL_WRITE_FAILED;
+    case "validation_error":
+      return VALIDATION_ERROR;
+    default:
+      return null;
+  }
 }
 
 function buildSuccessPayload(path: string): Record<string, unknown> {
@@ -309,6 +339,11 @@ function mockInvoke(
 }
 
 function mockDispatch(path: string, payload: Record<string, unknown>): Record<string, unknown> {
+  const forcedError = readForcedRpcError(payload);
+  if (forcedError !== null) {
+    throw forcedError;
+  }
+
   switch (path) {
     case "series.create": {
       const name = requireNonEmptyString(payload, "name");
@@ -393,6 +428,37 @@ function mockDispatch(path: string, payload: Record<string, unknown>): Record<st
       throw {
         code: UNKNOWN_COMMAND,
         message: `unknown rpc path \`${path}\``,
+      };
+  }
+}
+
+function readForcedRpcError(payload: Record<string, unknown>): { code: string; message: string } | null {
+  const raw = payload[FORCE_ERROR_CODE_FIELD];
+  if (typeof raw !== "string") {
+    return null;
+  }
+
+  const normalized = raw.trim().toUpperCase();
+  switch (normalized) {
+    case PG_TIMEOUT:
+      return {
+        code: PG_TIMEOUT,
+        message: "simulated postgres timeout for diagnostics",
+      };
+    case DUAL_WRITE_FAILED:
+      return {
+        code: DUAL_WRITE_FAILED,
+        message: "simulated dual write failure for diagnostics",
+      };
+    case VALIDATION_ERROR:
+      return {
+        code: VALIDATION_ERROR,
+        message: "simulated validation error for diagnostics",
+      };
+    default:
+      return {
+        code: VALIDATION_ERROR,
+        message: `field \`${FORCE_ERROR_CODE_FIELD}\` must be one of ${PG_TIMEOUT}, ${DUAL_WRITE_FAILED}, ${VALIDATION_ERROR}`,
       };
   }
 }

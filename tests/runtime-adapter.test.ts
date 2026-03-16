@@ -74,6 +74,20 @@ describe("runtime-adapter command envelope probe", () => {
     expect(probe.envelope.error?.code).toBe("VALIDATION_ERROR");
   });
 
+  it("returns pg timeout error when rpc_error is pg_timeout", () => {
+    const probe = readMockCommandProbe("?runtime_mode=dual_sync&rpc_error=pg_timeout");
+
+    expect(probe.envelope.ok).toBe(false);
+    expect(probe.envelope.error?.code).toBe("PG_TIMEOUT");
+  });
+
+  it("returns dual write failed error when rpc_error is dual_write_failed", () => {
+    const probe = readMockCommandProbe("?runtime_mode=dual_sync&rpc_error=dual_write_failed");
+
+    expect(probe.envelope.ok).toBe(false);
+    expect(probe.envelope.error?.code).toBe("DUAL_WRITE_FAILED");
+  });
+
   it("returns unknown command error for unsupported path", () => {
     const probe = readMockCommandProbe("?runtime_mode=sqlite_only&rpc_path=series.unknown");
 

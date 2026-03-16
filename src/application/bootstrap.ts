@@ -6,7 +6,7 @@ export async function bootstrapShell(): Promise<ShellState> {
 
   return {
     appTitle: "Remember",
-    subtitle: "Phase 1 Task 3 - Command Envelope Shell",
+    subtitle: "Phase 1 Task 4 - Tracing and Error Mapping",
     layers: {
       adapter: snapshot.adapter,
       application: "ready",
