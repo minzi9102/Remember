@@ -54,6 +54,16 @@ describe("runtime-adapter native title parser", () => {
     expect(status.usedFallback).toBe(true);
     expect(status.warnings).toContain("native runtime reports CONFIG_FALLBACK");
   });
+
+  it("adds warning when title includes HOTKEY_DISABLED marker", () => {
+    const status = parseNativeRuntimeStatusFromTitle("Remember [dual_sync] [HOTKEY_DISABLED]");
+
+    expect(status.mode).toBe("dual_sync");
+    expect(status.usedFallback).toBe(false);
+    expect(status.warnings).toContain(
+      "native runtime reports HOTKEY_DISABLED (global hotkey disabled)",
+    );
+  });
 });
 
 describe("runtime-adapter command envelope probe", () => {

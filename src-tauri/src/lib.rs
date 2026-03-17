@@ -19,6 +19,7 @@ pub fn run() {
     builder
         .setup(|app| {
             application::bootstrap(&app.handle());
+            adapter::bootstrap_runtime(&app.handle());
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -24,6 +24,7 @@ export interface AdapterSnapshot {
 const DEFAULT_MODE: RuntimeMode = "sqlite_only";
 const RUNTIME_MODE_PATTERN = /\[(sqlite_only|postgres_only|dual_sync)\]/;
 const FALLBACK_PATTERN = /\[CONFIG_FALLBACK\]/;
+const HOTKEY_DISABLED_PATTERN = /\[HOTKEY_DISABLED\]/;
 const DEFAULT_PROBE_PATH = "series.create";
 const VALIDATION_ERROR = "VALIDATION_ERROR";
 const UNKNOWN_COMMAND = "UNKNOWN_COMMAND";
@@ -54,6 +55,7 @@ export function parseMockRuntimeStatus(search: string): RuntimeStatus {
 export function parseNativeRuntimeStatusFromTitle(title: string): RuntimeStatus {
   const modeMatch = title.match(RUNTIME_MODE_PATTERN);
   const fallbackMarkExists = FALLBACK_PATTERN.test(title);
+  const hotkeyDisabledMarkExists = HOTKEY_DISABLED_PATTERN.test(title);
   const warnings: string[] = [];
 
   let mode: RuntimeMode = DEFAULT_MODE;
@@ -73,6 +75,9 @@ export function parseNativeRuntimeStatusFromTitle(title: string): RuntimeStatus 
 
   if (fallbackMarkExists) {
     warnings.push("native runtime reports CONFIG_FALLBACK");
+  }
+  if (hotkeyDisabledMarkExists) {
+    warnings.push("native runtime reports HOTKEY_DISABLED (global hotkey disabled)");
   }
 
   return {
