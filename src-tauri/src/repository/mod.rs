@@ -226,6 +226,7 @@ pub enum RepositoryError {
     Validation(String),
     NotFound(String),
     Conflict(String),
+    NotImplemented(String),
     Storage(String),
 }
 
@@ -242,6 +243,10 @@ impl RepositoryError {
         Self::Conflict(message.into())
     }
 
+    pub fn not_implemented(message: impl Into<String>) -> Self {
+        Self::NotImplemented(message.into())
+    }
+
     pub fn storage(message: impl Into<String>) -> Self {
         Self::Storage(message.into())
     }
@@ -253,6 +258,7 @@ impl fmt::Display for RepositoryError {
             Self::Validation(message) => write!(f, "validation error: {message}"),
             Self::NotFound(message) => write!(f, "not found: {message}"),
             Self::Conflict(message) => write!(f, "conflict: {message}"),
+            Self::NotImplemented(message) => write!(f, "not implemented: {message}"),
             Self::Storage(message) => write!(f, "storage error: {message}"),
         }
     }

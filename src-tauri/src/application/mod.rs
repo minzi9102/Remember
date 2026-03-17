@@ -5,7 +5,9 @@ pub mod service;
 use tauri::{AppHandle, Manager, Runtime};
 
 use self::config::{load_from_app_data, RuntimeConfigState};
-use self::service::bootstrap_sqlite_service;
+use self::service::{
+    bootstrap_not_implemented_service, bootstrap_postgres_service, bootstrap_sqlite_service,
+};
 use crate::repository::RepositoryLayer;
 
 pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) {
@@ -31,28 +33,47 @@ pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) {
         runtime_mode = repository.runtime_mode().as_config_value(),
         "repository layer initialized"
     );
-    if !matches!(runtime_mode, config::RuntimeMode::SqliteOnly) {
-        tracing::warn!(
-            component = "repository",
-            runtime_mode = runtime_mode.as_config_value(),
-            "runtime mode backend injection is not enabled yet, sqlite backend will be used in this phase"
-        );
-    }
 
-    let service_bootstrap =
-        tauri::async_runtime::block_on(bootstrap_sqlite_service(app, silent_days_threshold))
-            .unwrap_or_else(|error| panic!("failed to bootstrap application service: {error}"));
+    let service_bootstrap = match runtime_mode {
+        config::RuntimeMode::SqliteOnly => {
+            tauri::async_runtime::block_on(bootstrap_sqlite_service(app, silent_days_threshold))
+                .unwrap_or_else(|error| {
+                    panic!("failed to bootstrap sqlite application service: {error}")
+                })
+        }
+        config::RuntimeMode::PostgresOnly => {
+            let postgres_dsn =
+                resolve_postgres_dsn(&config_report.config).unwrap_or_else(|error| {
+                    panic!("{error}");
+                });
+            tauri::async_runtime::block_on(bootstrap_postgres_service(
+                &postgres_dsn,
+                silent_days_threshold,
+            ))
+            .unwrap_or_else(|error| {
+                panic!("failed to bootstrap postgres application service: {error}")
+            })
+        }
+        config::RuntimeMode::DualSync => {
+            tracing::warn!(
+                component = "repository",
+                runtime_mode = runtime_mode.as_config_value(),
+                "dual_sync backend is not implemented in phase 2, guarded mode enabled"
+            );
+            bootstrap_not_implemented_service(runtime_mode.as_config_value(), silent_days_threshold)
+        }
+    };
     for warning in &service_bootstrap.warnings {
         tracing::warn!(
             component = "repository",
             warning = %warning,
-            "sqlite bootstrap warning"
+            "service bootstrap warning"
         );
     }
     tracing::info!(
         component = "repository",
-        sqlite_path = %service_bootstrap.database_path.display(),
-        "application service initialized with sqlite backend"
+        backend_target = %service_bootstrap.backend_target,
+        "application service initialized"
     );
 
     app.manage(repository);
@@ -61,6 +82,25 @@ pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) {
 
     update_main_window_title(app);
     let _ = app.package_info();
+}
+
+fn resolve_postgres_dsn(config: &config::AppConfig) -> Result<String, String> {
+    let Some(dsn) = config.postgres_dsn.as_ref() else {
+        return Err(
+            "runtime_mode `postgres_only` requires non-empty `postgres_dsn` in config.toml"
+                .to_string(),
+        );
+    };
+
+    let trimmed = dsn.trim();
+    if trimmed.is_empty() {
+        return Err(
+            "runtime_mode `postgres_only` requires non-empty `postgres_dsn` in config.toml"
+                .to_string(),
+        );
+    }
+
+    Ok(trimmed.to_string())
 }
 
 fn update_main_window_title<R: Runtime>(app: &AppHandle<R>) {
@@ -93,5 +133,37 @@ fn update_main_window_title<R: Runtime>(app: &AppHandle<R>) {
             component = "config",
             "main window not found when setting runtime mode title"
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_postgres_dsn;
+    use crate::application::config::{AppConfig, RuntimeMode};
+
+    #[test]
+    fn postgres_only_requires_non_empty_dsn() {
+        let config = AppConfig {
+            runtime_mode: RuntimeMode::PostgresOnly,
+            postgres_dsn: None,
+            silent_days_threshold: 7,
+            hotkey: "Alt+Space".to_string(),
+        };
+
+        let error = resolve_postgres_dsn(&config).expect_err("missing dsn should fail");
+        assert!(error.contains("postgres_dsn"));
+    }
+
+    #[test]
+    fn postgres_only_accepts_trimmed_dsn() {
+        let config = AppConfig {
+            runtime_mode: RuntimeMode::PostgresOnly,
+            postgres_dsn: Some("  postgres://user:pass@localhost:5432/remember  ".to_string()),
+            silent_days_threshold: 7,
+            hotkey: "Alt+Space".to_string(),
+        };
+
+        let dsn = resolve_postgres_dsn(&config).expect("dsn should pass");
+        assert_eq!(dsn, "postgres://user:pass@localhost:5432/remember");
     }
 }

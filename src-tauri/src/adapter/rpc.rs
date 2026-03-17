@@ -13,6 +13,7 @@ const VALIDATION_ERROR_CODE: &str = "VALIDATION_ERROR";
 const UNKNOWN_COMMAND_CODE: &str = "UNKNOWN_COMMAND";
 const NOT_FOUND_CODE: &str = "NOT_FOUND";
 const CONFLICT_CODE: &str = "CONFLICT";
+const NOT_IMPLEMENTED_CODE: &str = "NOT_IMPLEMENTED";
 const INTERNAL_ERROR_CODE: &str = "INTERNAL_ERROR";
 const PG_TIMEOUT_CODE: &str = "PG_TIMEOUT";
 const DUAL_WRITE_FAILED_CODE: &str = "DUAL_WRITE_FAILED";
@@ -51,6 +52,7 @@ enum RpcErrorKind {
     UnknownCommand,
     NotFound,
     Conflict,
+    NotImplemented,
     Internal,
     PgTimeout,
     DualWriteFailed,
@@ -145,6 +147,7 @@ impl RpcErrorKind {
             Self::UnknownCommand => UNKNOWN_COMMAND_CODE,
             Self::NotFound => NOT_FOUND_CODE,
             Self::Conflict => CONFLICT_CODE,
+            Self::NotImplemented => NOT_IMPLEMENTED_CODE,
             Self::Internal => INTERNAL_ERROR_CODE,
             Self::PgTimeout => PG_TIMEOUT_CODE,
             Self::DualWriteFailed => DUAL_WRITE_FAILED_CODE,
@@ -177,6 +180,10 @@ impl RpcError {
 
     fn conflict(message: impl Into<String>) -> Self {
         Self::from_kind(RpcErrorKind::Conflict, message)
+    }
+
+    fn not_implemented(message: impl Into<String>) -> Self {
+        Self::from_kind(RpcErrorKind::NotImplemented, message)
     }
 
     fn internal(message: impl Into<String>) -> Self {
@@ -325,6 +332,7 @@ fn map_application_error(error: ApplicationError) -> RpcError {
         ApplicationError::Validation(message) => RpcError::validation(message),
         ApplicationError::NotFound(message) => RpcError::not_found(message),
         ApplicationError::Conflict(message) => RpcError::conflict(message),
+        ApplicationError::NotImplemented(message) => RpcError::not_implemented(message),
         ApplicationError::Internal(message) => RpcError::internal(message),
     }
 }
@@ -404,12 +412,12 @@ mod tests {
     use serde_json::Value;
 
     use super::{
-        handle_rpc, DUAL_WRITE_FAILED_CODE, NOT_FOUND_CODE, PG_TIMEOUT_CODE, UNKNOWN_COMMAND_CODE,
-        VALIDATION_ERROR_CODE,
+        handle_rpc, DUAL_WRITE_FAILED_CODE, NOT_FOUND_CODE, NOT_IMPLEMENTED_CODE, PG_TIMEOUT_CODE,
+        UNKNOWN_COMMAND_CODE, VALIDATION_ERROR_CODE,
     };
     use crate::application::{
         config::{AppConfig, RuntimeConfigState, RuntimeMode},
-        service::build_test_service_state,
+        service::{build_not_implemented_test_service_state, build_test_service_state},
     };
 
     #[tokio::test]
@@ -655,6 +663,74 @@ mod tests {
         assert!(!envelope.ok);
         let error = envelope.error.expect("error should exist");
         assert_eq!(error.code, DUAL_WRITE_FAILED_CODE);
+    }
+
+    #[tokio::test]
+    async fn returns_not_implemented_for_all_commands_in_dual_sync_guarded_mode() {
+        let state = RuntimeConfigState {
+            config: AppConfig {
+                runtime_mode: RuntimeMode::DualSync,
+                postgres_dsn: Some("postgres://configured".to_string()),
+                silent_days_threshold: 7,
+                hotkey: "Alt+Space".to_string(),
+            },
+            config_path: PathBuf::from("config.toml"),
+            warnings: Vec::new(),
+            used_fallback: false,
+        };
+        let service_state = build_not_implemented_test_service_state();
+
+        let test_cases = vec![
+            ("series.create", serde_json::json!({ "name": "Inbox" })),
+            (
+                "series.list",
+                serde_json::json!({
+                    "query": "",
+                    "includeArchived": false,
+                    "cursor": null,
+                    "limit": 20
+                }),
+            ),
+            (
+                "commit.append",
+                serde_json::json!({
+                    "seriesId": "series-inbox",
+                    "content": "first-note",
+                    "clientTs": "2026-03-16T00:00:00Z"
+                }),
+            ),
+            (
+                "timeline.list",
+                serde_json::json!({
+                    "seriesId": "series-inbox",
+                    "cursor": null,
+                    "limit": 20
+                }),
+            ),
+            (
+                "series.archive",
+                serde_json::json!({
+                    "seriesId": "series-inbox"
+                }),
+            ),
+            (
+                "series.scan_silent",
+                serde_json::json!({
+                    "now": "2026-03-16T00:00:00Z",
+                    "thresholdDays": 7
+                }),
+            ),
+        ];
+
+        for (path, payload) in test_cases {
+            let envelope = handle_rpc(path, payload, &state, service_state.service()).await;
+            assert!(!envelope.ok, "{path} should fail in guarded dual_sync mode");
+            let error = envelope.error.expect("error should exist");
+            assert_eq!(
+                error.code, NOT_IMPLEMENTED_CODE,
+                "{path} should map to NOT_IMPLEMENTED"
+            );
+        }
     }
 
     fn test_state() -> RuntimeConfigState {
