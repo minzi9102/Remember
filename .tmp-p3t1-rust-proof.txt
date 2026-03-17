@@ -1,0 +1,9 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.75s
+     Running tests\p3_t1_dual_sync_repository.rs (src-tauri\target\debug\deps\p3_t1_dual_sync_repository-3662b75a78d742a7.exe)
+
+running 2 tests
+test p3_t1_dual_sync_reads_series_from_sqlite ... ok
+test p3_t1_dual_sync_keeps_commit_id_and_created_at_consistent ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
