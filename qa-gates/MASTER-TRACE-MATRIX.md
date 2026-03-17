@@ -18,7 +18,7 @@
 | P3-T2 | phase-3/p3-t2-parallel-tx-timeout.md | Postgres 超时 3s | Phase 3 / 子任务 2 | 4 | TODO |
 | P3-T3 | phase-3/p3-t3-rollback-error-codes.md | PG_TIMEOUT / DUAL_WRITE_FAILED | Phase 3 / 子任务 3 | 4 | TODO |
 | P3-T4 | phase-3/p3-t4-single-side-compensation-alerts.md | consistency_alerts | Phase 3 / 子任务 4 | 4 | PASS |
-| P3-T5 | phase-3/p3-t5-startup-self-heal.md | 启动自愈扫描 | Phase 3 / 子任务 5 | 4 | TODO |
+| P3-T5 | phase-3/p3-t5-startup-self-heal.md | 启动自愈扫描 | Phase 3 / 子任务 5 | 4 | PASS |
 | P4-T1 | phase-4/p4-t1-global-hotkey.md | tauri-plugin-global-shortcut | Phase 4 / 子任务 1 | 4 | TODO |
 | P4-T2 | phase-4/p4-t2-list-timeline-navigation.md | 列表/时间线二级视图 | Phase 4 / 子任务 2 | 4 | TODO |
 | P4-T3 | phase-4/p4-t3-keyboard-shortcuts.md | ↑/↓/Enter/Esc/←/→//Shift+N/a | Phase 4 / 子任务 3 | 4 | TODO |
