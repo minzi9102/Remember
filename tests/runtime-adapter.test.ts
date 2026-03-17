@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildDefaultSeriesListRequest,
+  buildDefaultTimelineRequest,
   parseMockRuntimeStatus,
   parseNativeRuntimeStatusFromTitle,
   readMockCommandProbe,
+  readMockSeriesList,
+  readMockTimeline,
 } from "../src/adapter/runtime-adapter";
 
 describe("runtime-adapter mock parser", () => {
@@ -101,9 +105,11 @@ describe("runtime-adapter command envelope probe", () => {
           id: "series-inbox",
           name: "Inbox",
           status: "active",
-          lastUpdatedAt: "2026-03-16T00:00:00Z",
-          latestExcerpt: "first-note",
-          createdAt: "2026-03-15T00:00:00Z",
+        },
+        {
+          id: "series-project-a",
+          name: "Project-A",
+          status: "silent",
         },
       ],
       nextCursor: null,
@@ -187,5 +193,57 @@ describe("runtime-adapter command envelope probe", () => {
       failedAlerts: 1,
       messages: ["alert-a", "alert-b", "alert-c"],
     });
+  });
+});
+
+describe("runtime-adapter typed helpers", () => {
+  it("returns series list data in mock mode", () => {
+    const envelope = readMockSeriesList("?runtime_mode=sqlite_only", buildDefaultSeriesListRequest());
+
+    expect(envelope.ok).toBe(true);
+    expect(envelope.data?.items).toHaveLength(2);
+    expect(envelope.data?.items[0]?.id).toBe("series-inbox");
+  });
+
+  it("returns validation error for series list when mock fail flag is enabled", () => {
+    const envelope = readMockSeriesList(
+      "?runtime_mode=sqlite_only&rpc_fail=1",
+      buildDefaultSeriesListRequest(),
+    );
+
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error?.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns forced error for timeline helper", () => {
+    const envelope = readMockTimeline(
+      "?runtime_mode=dual_sync&rpc_error=dual_write_failed",
+      "series-inbox",
+      buildDefaultTimelineRequest(),
+    );
+
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error?.code).toBe("DUAL_WRITE_FAILED");
+  });
+
+  it("returns timeline items for the requested series", () => {
+    const envelope = readMockTimeline(
+      "?runtime_mode=sqlite_only",
+      "series-project-a",
+      buildDefaultTimelineRequest(),
+    );
+
+    expect(envelope.ok).toBe(true);
+    expect(envelope.data?.seriesId).toBe("series-project-a");
+    expect(envelope.data?.items).toMatchObject([
+      {
+        id: "stub-commit-002",
+        content: "follow-up-note",
+      },
+      {
+        id: "stub-commit-003",
+        content: "first-project-note",
+      },
+    ]);
   });
 });

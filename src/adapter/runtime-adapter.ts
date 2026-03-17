@@ -21,6 +21,18 @@ export interface AdapterSnapshot {
   commandProbe: CommandProbe;
 }
 
+export interface SeriesListRequest {
+  query: string;
+  includeArchived: boolean;
+  cursor: string | null;
+  limit: number;
+}
+
+export interface TimelineRequest {
+  cursor: string | null;
+  limit: number;
+}
+
 const DEFAULT_MODE: RuntimeMode = "sqlite_only";
 const RUNTIME_MODE_PATTERN = /\[(sqlite_only|postgres_only|dual_sync)\]/;
 const FALLBACK_PATTERN = /\[CONFIG_FALLBACK\]/;
@@ -124,7 +136,7 @@ function isTauriRuntime(): boolean {
 
 export function readMockCommandProbe(search: string): CommandProbe {
   const runtimeStatus = parseMockRuntimeStatus(search);
-  const request = buildProbeRequest(search);
+  const request = buildMockRequest(search);
 
   return {
     source: "mock",
@@ -136,6 +148,56 @@ export function readMockCommandProbe(search: string): CommandProbe {
       request.startupSelfHeal,
     ),
   };
+}
+
+export function readMockSeriesList(
+  search: string,
+  request: SeriesListRequest = buildDefaultSeriesListRequest(),
+): RpcEnvelope<SeriesListData> {
+  const runtimeStatus = parseMockRuntimeStatus(search);
+  const mockRequest = buildMockRequest(search, "series.list", { ...request });
+
+  return mockInvoke(
+    "series.list",
+    mockRequest.payload,
+    runtimeStatus,
+    mockRequest.startupSelfHeal,
+  ) as RpcEnvelope<SeriesListData>;
+}
+
+export function readMockTimeline(
+  search: string,
+  seriesId: string,
+  request: TimelineRequest = buildDefaultTimelineRequest(),
+): RpcEnvelope<TimelineListData> {
+  const runtimeStatus = parseMockRuntimeStatus(search);
+  const mockRequest = buildMockRequest(search, "timeline.list", {
+    seriesId,
+    ...request,
+  });
+
+  return mockInvoke(
+    "timeline.list",
+    mockRequest.payload,
+    runtimeStatus,
+    mockRequest.startupSelfHeal,
+  ) as RpcEnvelope<TimelineListData>;
+}
+
+export async function loadSeriesList(
+  request: SeriesListRequest,
+): Promise<RpcEnvelope<SeriesListData>> {
+  return invokeRpcEnvelope<SeriesListData>("series.list", { ...request });
+}
+
+export async function loadTimeline(
+  seriesId: string,
+  request: TimelineRequest,
+): Promise<RpcEnvelope<TimelineListData>> {
+  return invokeRpcEnvelope<TimelineListData>("timeline.list", {
+    seriesId,
+    ...request,
+  });
 }
 
 function collectWarningsFromParams(params: URLSearchParams): string[] {
@@ -250,7 +312,7 @@ function uniqueWarnings(warnings: string[]): string[] {
 
 async function readCommandProbe(runtimeStatus: RuntimeStatus): Promise<CommandProbe> {
   const search = typeof window === "undefined" ? "" : window.location.search;
-  const request = buildProbeRequest(search);
+  const request = buildMockRequest(search);
 
   if (!isTauriRuntime()) {
     return {
@@ -292,16 +354,56 @@ async function readCommandProbe(runtimeStatus: RuntimeStatus): Promise<CommandPr
   }
 }
 
-function buildProbeRequest(search: string): {
+async function invokeRpcEnvelope<T extends RpcData>(
+  path: string,
+  payload: Record<string, unknown>,
+): Promise<RpcEnvelope<T>> {
+  const runtimeStatus = await readRuntimeStatus();
+  const search = typeof window === "undefined" ? "" : window.location.search;
+  const request = buildMockRequest(search, path, payload);
+
+  if (!isTauriRuntime()) {
+    return mockInvoke(
+      path,
+      request.payload,
+      runtimeStatus,
+      request.startupSelfHeal,
+    ) as RpcEnvelope<T>;
+  }
+
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<RpcEnvelope<T>>("rpc_invoke", {
+      path,
+      payload,
+    });
+  } catch (error) {
+    return buildErrorEnvelope(
+      path,
+      runtimeStatus,
+      request.startupSelfHeal,
+      INVOKE_FAILED,
+      `failed to invoke native rpc shell: ${String(error)}`,
+    ) as RpcEnvelope<T>;
+  }
+}
+
+function buildMockRequest(
+  search: string,
+  forcedPath?: string,
+  payloadOverride?: Record<string, unknown>,
+): {
   path: string;
   payload: Record<string, unknown>;
   startupSelfHeal: StartupSelfHealSummary;
 } {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
-  const path = normalizeProbePath(params.get("rpc_path"));
+  const path = forcedPath ?? normalizeProbePath(params.get("rpc_path"));
   const forceFail = isTruthy(params.get("rpc_fail"));
   const forceErrorCode = parseForcedErrorCode(params.get("rpc_error"));
-  const basePayload = forceFail ? buildFailPayload(path) : buildSuccessPayload(path);
+  const basePayload = forceFail
+    ? buildFailPayload(path)
+    : payloadOverride ?? buildSuccessPayload(path);
   const payload =
     forceErrorCode === null
       ? basePayload
@@ -324,6 +426,22 @@ function normalizeProbePath(rawPath: string | null): string {
 
   const trimmed = rawPath.trim();
   return trimmed.length > 0 ? trimmed : DEFAULT_PROBE_PATH;
+}
+
+export function buildDefaultSeriesListRequest(): SeriesListRequest {
+  return {
+    query: "",
+    includeArchived: false,
+    cursor: null,
+    limit: 50,
+  };
+}
+
+export function buildDefaultTimelineRequest(): TimelineRequest {
+  return {
+    cursor: null,
+    limit: 100,
+  };
 }
 
 function isTruthy(raw: string | null): boolean {
@@ -461,17 +579,11 @@ function mockDispatch(path: string, payload: Record<string, unknown>): RpcData {
       const includeArchived = requireBoolean(payload, "includeArchived");
       const cursor = requireNullableString(payload, "cursor");
       const limit = requirePositiveInteger(payload, "limit");
+      const items = buildMockSeriesItems().filter((item) =>
+        query.length === 0 ? true : item.name.toLowerCase().includes(query.toLowerCase()),
+      );
       const data: SeriesListData = {
-        items: [
-          {
-            id: "series-inbox",
-            name: "Inbox",
-            status: "active",
-            lastUpdatedAt: "2026-03-16T00:00:00Z",
-            latestExcerpt: "first-note",
-            createdAt: "2026-03-15T00:00:00Z",
-          },
-        ],
+        items,
         nextCursor: query.length > 0 ? null : cursor,
         limitEcho: limit,
       };
@@ -506,14 +618,7 @@ function mockDispatch(path: string, payload: Record<string, unknown>): RpcData {
       requirePositiveInteger(payload, "limit");
       const data: TimelineListData = {
         seriesId,
-        items: [
-          {
-            id: "stub-commit-001",
-            seriesId,
-            content: "first-note",
-            createdAt: "2026-03-16T00:00:00Z",
-          },
-        ],
+        items: buildMockTimelineItems(seriesId),
         nextCursor: null,
       };
       return data;
@@ -549,6 +654,55 @@ function buildExcerpt(content: string): string {
   }
 
   return `${content.slice(0, 48)}...`;
+}
+
+function buildMockSeriesItems() {
+  return [
+    {
+      id: "series-inbox",
+      name: "Inbox",
+      status: "active" as const,
+      lastUpdatedAt: "2026-03-16T00:00:00Z",
+      latestExcerpt: "first-note",
+      createdAt: "2026-03-15T00:00:00Z",
+    },
+    {
+      id: "series-project-a",
+      name: "Project-A",
+      status: "silent" as const,
+      lastUpdatedAt: "2026-03-08T00:00:00Z",
+      latestExcerpt: "follow-up-note",
+      createdAt: "2026-03-01T00:00:00Z",
+    },
+  ];
+}
+
+function buildMockTimelineItems(seriesId: string) {
+  if (seriesId === "series-project-a") {
+    return [
+      {
+        id: "stub-commit-002",
+        seriesId,
+        content: "follow-up-note",
+        createdAt: "2026-03-08T09:00:00Z",
+      },
+      {
+        id: "stub-commit-003",
+        seriesId,
+        content: "first-project-note",
+        createdAt: "2026-03-01T08:30:00Z",
+      },
+    ];
+  }
+
+  return [
+    {
+      id: "stub-commit-001",
+      seriesId,
+      content: "first-note",
+      createdAt: "2026-03-16T00:00:00Z",
+    },
+  ];
 }
 
 function readForcedRpcError(payload: Record<string, unknown>): { code: string; message: string } | null {

@@ -2,6 +2,8 @@ export type LayerState = "ready" | "stubbed";
 export type RuntimeMode = "sqlite_only" | "postgres_only" | "dual_sync";
 export type RuntimeSource = "native" | "mock";
 export type SeriesStatus = "active" | "silent" | "archived";
+export type ShellView = "series_list" | "timeline";
+export type TimelineLoadState = "idle" | "loading" | "ready" | "error";
 
 export interface LayerHealth {
   adapter: LayerState;
@@ -113,6 +115,11 @@ export interface ShellState {
   layers: LayerHealth;
   runtimeStatus: RuntimeStatus;
   commandProbe: CommandProbe;
-  seriesPreview: SeriesSummary[];
-  timelinePreview: CommitItem[];
+  view: ShellView;
+  seriesList: SeriesSummary[];
+  selectedSeriesId: string | null;
+  activeTimelineSeries: SeriesSummary | null;
+  timelineLoadState: TimelineLoadState;
+  timelineItems: CommitItem[];
+  navigationError: RpcError | null;
 }
