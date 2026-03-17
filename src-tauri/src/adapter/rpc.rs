@@ -412,12 +412,12 @@ mod tests {
     use serde_json::Value;
 
     use super::{
-        handle_rpc, DUAL_WRITE_FAILED_CODE, NOT_FOUND_CODE, NOT_IMPLEMENTED_CODE, PG_TIMEOUT_CODE,
-        UNKNOWN_COMMAND_CODE, VALIDATION_ERROR_CODE,
+        handle_rpc, DUAL_WRITE_FAILED_CODE, NOT_FOUND_CODE, PG_TIMEOUT_CODE, UNKNOWN_COMMAND_CODE,
+        VALIDATION_ERROR_CODE,
     };
     use crate::application::{
         config::{AppConfig, RuntimeConfigState, RuntimeMode},
-        service::{build_not_implemented_test_service_state, build_test_service_state},
+        service::build_test_service_state,
     };
 
     #[tokio::test]
@@ -666,71 +666,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn returns_not_implemented_for_all_commands_in_dual_sync_guarded_mode() {
-        let state = RuntimeConfigState {
-            config: AppConfig {
-                runtime_mode: RuntimeMode::DualSync,
-                postgres_dsn: Some("postgres://configured".to_string()),
-                silent_days_threshold: 7,
-                hotkey: "Alt+Space".to_string(),
-            },
-            config_path: PathBuf::from("config.toml"),
-            warnings: Vec::new(),
-            used_fallback: false,
-        };
-        let service_state = build_not_implemented_test_service_state();
+    async fn dual_sync_runtime_mode_executes_commands_with_dual_meta() {
+        let state = dual_sync_test_state();
+        let service_state = build_test_service_state().await;
+        let envelope = handle_rpc(
+            "series.create",
+            serde_json::json!({ "name": "Inbox" }),
+            &state,
+            service_state.service(),
+        )
+        .await;
 
-        let test_cases = vec![
-            ("series.create", serde_json::json!({ "name": "Inbox" })),
-            (
-                "series.list",
-                serde_json::json!({
-                    "query": "",
-                    "includeArchived": false,
-                    "cursor": null,
-                    "limit": 20
-                }),
-            ),
-            (
-                "commit.append",
-                serde_json::json!({
-                    "seriesId": "series-inbox",
-                    "content": "first-note",
-                    "clientTs": "2026-03-16T00:00:00Z"
-                }),
-            ),
-            (
-                "timeline.list",
-                serde_json::json!({
-                    "seriesId": "series-inbox",
-                    "cursor": null,
-                    "limit": 20
-                }),
-            ),
-            (
-                "series.archive",
-                serde_json::json!({
-                    "seriesId": "series-inbox"
-                }),
-            ),
-            (
-                "series.scan_silent",
-                serde_json::json!({
-                    "now": "2026-03-16T00:00:00Z",
-                    "thresholdDays": 7
-                }),
-            ),
-        ];
-
-        for (path, payload) in test_cases {
-            let envelope = handle_rpc(path, payload, &state, service_state.service()).await;
-            assert!(!envelope.ok, "{path} should fail in guarded dual_sync mode");
-            let error = envelope.error.expect("error should exist");
-            assert_eq!(
-                error.code, NOT_IMPLEMENTED_CODE,
-                "{path} should map to NOT_IMPLEMENTED"
-            );
-        }
+        assert!(envelope.ok, "dual_sync mode should execute command");
+        assert_eq!(envelope.meta.runtime_mode, "dual_sync");
+        assert!(envelope.error.is_none());
     }
 
     fn test_state() -> RuntimeConfigState {
@@ -738,6 +687,20 @@ mod tests {
             config: AppConfig {
                 runtime_mode: RuntimeMode::SqliteOnly,
                 postgres_dsn: None,
+                silent_days_threshold: 7,
+                hotkey: "Alt+Space".to_string(),
+            },
+            config_path: PathBuf::from("config.toml"),
+            warnings: Vec::new(),
+            used_fallback: false,
+        }
+    }
+
+    fn dual_sync_test_state() -> RuntimeConfigState {
+        RuntimeConfigState {
+            config: AppConfig {
+                runtime_mode: RuntimeMode::DualSync,
+                postgres_dsn: Some("postgres://configured".to_string()),
                 silent_days_threshold: 7,
                 hotkey: "Alt+Space".to_string(),
             },

@@ -6,7 +6,7 @@ use tauri::{AppHandle, Manager, Runtime};
 
 use self::config::{load_from_app_data, RuntimeConfigState};
 use self::service::{
-    bootstrap_not_implemented_service, bootstrap_postgres_service, bootstrap_sqlite_service,
+    bootstrap_dual_sync_service, bootstrap_postgres_service, bootstrap_sqlite_service,
 };
 use crate::repository::RepositoryLayer;
 
@@ -42,8 +42,8 @@ pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) {
                 })
         }
         config::RuntimeMode::PostgresOnly => {
-            let postgres_dsn =
-                resolve_postgres_dsn(&config_report.config).unwrap_or_else(|error| {
+            let postgres_dsn = resolve_postgres_dsn(&config_report.config, "postgres_only")
+                .unwrap_or_else(|error| {
                     panic!("{error}");
                 });
             tauri::async_runtime::block_on(bootstrap_postgres_service(
@@ -55,12 +55,19 @@ pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) {
             })
         }
         config::RuntimeMode::DualSync => {
-            tracing::warn!(
-                component = "repository",
-                runtime_mode = runtime_mode.as_config_value(),
-                "dual_sync backend is not implemented in phase 2, guarded mode enabled"
-            );
-            bootstrap_not_implemented_service(runtime_mode.as_config_value(), silent_days_threshold)
+            let postgres_dsn =
+                resolve_postgres_dsn(&config_report.config, runtime_mode.as_config_value())
+                    .unwrap_or_else(|error| {
+                        panic!("{error}");
+                    });
+            tauri::async_runtime::block_on(bootstrap_dual_sync_service(
+                app,
+                &postgres_dsn,
+                silent_days_threshold,
+            ))
+            .unwrap_or_else(|error| {
+                panic!("failed to bootstrap dual_sync application service: {error}")
+            })
         }
     };
     for warning in &service_bootstrap.warnings {
@@ -84,20 +91,18 @@ pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) {
     let _ = app.package_info();
 }
 
-fn resolve_postgres_dsn(config: &config::AppConfig) -> Result<String, String> {
+fn resolve_postgres_dsn(config: &config::AppConfig, runtime_mode: &str) -> Result<String, String> {
     let Some(dsn) = config.postgres_dsn.as_ref() else {
-        return Err(
-            "runtime_mode `postgres_only` requires non-empty `postgres_dsn` in config.toml"
-                .to_string(),
-        );
+        return Err(format!(
+            "runtime_mode `{runtime_mode}` requires non-empty `postgres_dsn` in config.toml"
+        ));
     };
 
     let trimmed = dsn.trim();
     if trimmed.is_empty() {
-        return Err(
-            "runtime_mode `postgres_only` requires non-empty `postgres_dsn` in config.toml"
-                .to_string(),
-        );
+        return Err(format!(
+            "runtime_mode `{runtime_mode}` requires non-empty `postgres_dsn` in config.toml"
+        ));
     }
 
     Ok(trimmed.to_string())
@@ -150,7 +155,23 @@ mod tests {
             hotkey: "Alt+Space".to_string(),
         };
 
-        let error = resolve_postgres_dsn(&config).expect_err("missing dsn should fail");
+        let error =
+            resolve_postgres_dsn(&config, "postgres_only").expect_err("missing dsn should fail");
+        assert!(error.contains("postgres_dsn"));
+    }
+
+    #[test]
+    fn dual_sync_requires_non_empty_dsn() {
+        let config = AppConfig {
+            runtime_mode: RuntimeMode::DualSync,
+            postgres_dsn: None,
+            silent_days_threshold: 7,
+            hotkey: "Alt+Space".to_string(),
+        };
+
+        let error =
+            resolve_postgres_dsn(&config, "dual_sync").expect_err("missing dsn should fail");
+        assert!(error.contains("dual_sync"));
         assert!(error.contains("postgres_dsn"));
     }
 
@@ -163,7 +184,7 @@ mod tests {
             hotkey: "Alt+Space".to_string(),
         };
 
-        let dsn = resolve_postgres_dsn(&config).expect("dsn should pass");
+        let dsn = resolve_postgres_dsn(&config, "postgres_only").expect("dsn should pass");
         assert_eq!(dsn, "postgres://user:pass@localhost:5432/remember");
     }
 }

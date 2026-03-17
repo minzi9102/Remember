@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 pub mod migrations;
+mod dual_sync;
 mod postgres;
 mod sqlite;
 
@@ -10,6 +11,8 @@ use std::sync::Arc;
 use crate::application::config::RuntimeMode;
 use async_trait::async_trait;
 
+#[allow(unused_imports)]
+pub use dual_sync::DualSyncRepository;
 #[allow(unused_imports)]
 pub use postgres::PostgresRepository;
 #[allow(unused_imports)]

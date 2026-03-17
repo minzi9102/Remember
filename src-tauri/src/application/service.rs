@@ -3,7 +3,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
@@ -15,9 +14,8 @@ use super::dto::{
     SeriesScanSilentData, SeriesStatus, SeriesSummary, TimelineListData,
 };
 use crate::repository::{
-    self, AppendCommitInput, AppendCommitResult, ArchiveSeriesInput, ArchiveSeriesResult,
-    CommitRecord, CreateSeriesInput, DynMemoRepository, ListSeriesQuery, MarkSilentSeriesInput,
-    MarkSilentSeriesResult, MemoRepository, PagedResult, RepositoryError, SearchSeriesQuery,
+    self, AppendCommitInput, ArchiveSeriesInput, CommitRecord, CreateSeriesInput,
+    DynMemoRepository, ListSeriesQuery, MarkSilentSeriesInput, RepositoryError, SearchSeriesQuery,
     SeriesRecord, TimelineQuery,
 };
 
@@ -332,19 +330,44 @@ pub async fn bootstrap_postgres_service(
     })
 }
 
-pub fn bootstrap_not_implemented_service(
-    runtime_mode: &str,
+pub async fn bootstrap_dual_sync_service<R: Runtime>(
+    app: &AppHandle<R>,
+    postgres_dsn: &str,
     silent_days_threshold: u32,
-) -> ServiceBootstrapReport {
-    let reason = format!("runtime_mode `{runtime_mode}` is not implemented yet in phase 2");
-    let repository: DynMemoRepository = Arc::new(NotImplementedRepository::new(reason.clone()));
+) -> Result<ServiceBootstrapReport, ApplicationError> {
+    let (database_path, warnings) = resolve_sqlite_database_path(app);
+
+    let sqlite_pool = connect_sqlite_pool(&database_path).await?;
+    repository::migrations::run_sqlite_migrations(&sqlite_pool)
+        .await
+        .map_err(|error| {
+            ApplicationError::internal(format!(
+                "failed to run sqlite migrations on {}: {error}",
+                database_path.display()
+            ))
+        })?;
+
+    let postgres_pool = connect_postgres_pool(postgres_dsn).await?;
+    repository::migrations::run_postgres_migrations(&postgres_pool)
+        .await
+        .map_err(|error| {
+            ApplicationError::internal(format!(
+                "failed to run postgres migrations with configured postgres_dsn: {error}"
+            ))
+        })?;
+
+    let repository: DynMemoRepository =
+        Arc::new(repository::DualSyncRepository::new(sqlite_pool, postgres_pool));
     let service = ApplicationService::new(repository, silent_days_threshold);
 
-    ServiceBootstrapReport {
+    Ok(ServiceBootstrapReport {
         service_state: ApplicationServiceState::new(service),
-        backend_target: format!("{runtime_mode}(guarded_not_implemented)"),
-        warnings: vec![reason],
-    }
+        backend_target: format!(
+            "dual_sync(sqlite={}, postgres=configured_dsn)",
+            database_path.display()
+        ),
+        warnings,
+    })
 }
 
 async fn connect_sqlite_pool(database_path: &PathBuf) -> Result<SqlitePool, ApplicationError> {
@@ -399,73 +422,6 @@ fn resolve_sqlite_database_path<R: Runtime>(app: &AppHandle<R>) -> (PathBuf, Vec
     }
 
     (PathBuf::from(SQLITE_DB_FILE_NAME), warnings)
-}
-
-#[derive(Clone)]
-struct NotImplementedRepository {
-    reason: String,
-}
-
-impl NotImplementedRepository {
-    fn new(reason: String) -> Self {
-        Self { reason }
-    }
-
-    fn not_implemented_error(&self) -> RepositoryError {
-        RepositoryError::not_implemented(self.reason.clone())
-    }
-}
-
-#[async_trait]
-impl MemoRepository for NotImplementedRepository {
-    async fn create_series(
-        &self,
-        _input: CreateSeriesInput,
-    ) -> Result<SeriesRecord, RepositoryError> {
-        Err(self.not_implemented_error())
-    }
-
-    async fn list_series(
-        &self,
-        _query: ListSeriesQuery,
-    ) -> Result<PagedResult<SeriesRecord>, RepositoryError> {
-        Err(self.not_implemented_error())
-    }
-
-    async fn append_commit(
-        &self,
-        _input: AppendCommitInput,
-    ) -> Result<AppendCommitResult, RepositoryError> {
-        Err(self.not_implemented_error())
-    }
-
-    async fn list_timeline(
-        &self,
-        _query: TimelineQuery,
-    ) -> Result<PagedResult<CommitRecord>, RepositoryError> {
-        Err(self.not_implemented_error())
-    }
-
-    async fn archive_series(
-        &self,
-        _input: ArchiveSeriesInput,
-    ) -> Result<ArchiveSeriesResult, RepositoryError> {
-        Err(self.not_implemented_error())
-    }
-
-    async fn mark_silent_series(
-        &self,
-        _input: MarkSilentSeriesInput,
-    ) -> Result<MarkSilentSeriesResult, RepositoryError> {
-        Err(self.not_implemented_error())
-    }
-
-    async fn search_series_by_name(
-        &self,
-        _query: SearchSeriesQuery,
-    ) -> Result<Vec<SeriesRecord>, RepositoryError> {
-        Err(self.not_implemented_error())
-    }
 }
 
 fn map_series_record(record: SeriesRecord) -> SeriesSummary {
@@ -547,20 +503,12 @@ pub(crate) async fn build_test_service_state() -> ApplicationServiceState {
 }
 
 #[cfg(test)]
-pub(crate) fn build_not_implemented_test_service_state() -> ApplicationServiceState {
-    bootstrap_not_implemented_service("dual_sync", 7).service_state
-}
-
-#[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
     use sqlx::sqlite::SqlitePoolOptions;
 
-    use super::{
-        bootstrap_not_implemented_service, bootstrap_postgres_service, ApplicationError,
-        ApplicationService,
-    };
+    use super::{bootstrap_postgres_service, ApplicationError, ApplicationService};
     use crate::repository::{
         self, CreateSeriesInput, ListSeriesQuery, MarkSilentSeriesInput, MemoRepository,
     };
@@ -711,18 +659,6 @@ mod tests {
             .find(|item| item.id == "series-old")
             .expect("old series should exist");
         assert_eq!(old.status.as_db_value(), "silent");
-    }
-
-    #[tokio::test]
-    async fn dual_sync_guarded_service_returns_not_implemented() {
-        let guarded = bootstrap_not_implemented_service("dual_sync", 7);
-        let error = guarded
-            .service_state
-            .service()
-            .create_series("Inbox".to_string())
-            .await
-            .expect_err("dual_sync guarded service should reject create_series");
-        assert!(matches!(error, ApplicationError::NotImplemented(_)));
     }
 
     #[tokio::test]
