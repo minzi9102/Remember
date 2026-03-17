@@ -7,7 +7,7 @@
 {"task_name":"定义并实现 Repository Trait 与两个后端。","completed":true}
 {"task_name":"完成 Application Service（创建系列、提交、列表、时间线、归档、搜索）。","completed":true}
 {"task_name":"按 `runtime_mode` 注入后端实现。","completed":true}
-{"task_name":"完成基础读写与查询测试。","completed":false}
+{"task_name":"完成基础读写与查询测试。","completed":true}
 {"task_name":"实现 `DualSyncRepository`（统一 `commit_id + created_at`）。","completed":false}
 {"task_name":"并行事务写入并设置 Postgres 3s 超时。","completed":false}
 {"task_name":"失败时双边回滚并返回 `PG_TIMEOUT` / `DUAL_WRITE_FAILED`。","completed":false}
