@@ -1,0 +1,116 @@
+case_id: P3-T1-VG-PASS
+steps -> visible result -> log proof -> conclusion
+runtime_mode: dual_sync
+env_id: ENV-DUAL
+### Browser `P3T1-ENV-DUAL-VG-PASS` opened with pid 34040.
+- P3T1-ENV-DUAL-VG-PASS:
+  - browser-type: msedge
+  - user-data-dir: <in-memory>
+  - headed: false
+---
+### Ran Playwright code
+```js
+await page.goto('http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.create');
+```
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.create
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T03-57-34-248Z.yml)
+### Ran Playwright code
+```js
+await page.goto('http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.create');
+```
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.create
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T03-58-10-239Z.yml)
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.create
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T03-58-11-544Z.yml)
+### Ran Playwright code
+```js
+await page.goto('http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=commit.append');
+```
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=commit.append
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T03-58-12-923Z.yml)
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=commit.append
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T03-58-14-185Z.yml)
+### Ran Playwright code
+```js
+await page.goto('http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.list');
+```
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.list
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T03-58-15-554Z.yml)
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.list
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T03-58-16-844Z.yml)
+### Ran Playwright code
+```js
+await page.goto('http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=timeline.list');
+```
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=timeline.list
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T03-58-18-227Z.yml)
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=timeline.list
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T03-58-19-491Z.yml)
+### Ran Playwright code
+```js
+await page.goto('http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.archive');
+```
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.archive
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T03-58-20-828Z.yml)
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.archive
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T03-58-22-168Z.yml)
+### Result
+- [Screenshot of full page](qa-gates-codex\P3-T1-VG-PASS_20260317_ENV-DUAL_codex.png)
+### Ran Playwright code
+```js
+// Screenshot full page and save it as qa-gates-codex\P3-T1-VG-PASS_20260317_ENV-DUAL_codex.png
+await page.screenshot({
+fullPage: true,
+  path: 'qa-gates-codex\\P3-T1-VG-PASS_20260317_ENV-DUAL_codex.png',
+  scale: 'css',
+  type: 'png'
+});
+```
+Browser 'P3T1-ENV-DUAL-VG-PASS' closed
+
+
+[rust-proof]
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.75s
+     Running tests\p3_t1_dual_sync_repository.rs (src-tauri\target\debug\deps\p3_t1_dual_sync_repository-3662b75a78d742a7.exe)
+
+running 2 tests
+test p3_t1_dual_sync_reads_series_from_sqlite ... ok
+test p3_t1_dual_sync_keeps_commit_id_and_created_at_consistent ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+
+conclusion: PASS

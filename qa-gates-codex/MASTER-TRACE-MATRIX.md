@@ -12,7 +12,7 @@
 | P2-T3 | `phase-2/p2-t3-application-service-flow.md` | 2 | 4 | PASS |
 | P2-T4 | `phase-2/p2-t4-runtime-mode-injection.md` | 2 | 4 | TODO |
 | P2-T5 | `phase-2/p2-t5-basic-read-write-query.md` | 2 | 4 | PASS |
-| P3-T1 | `phase-3/p3-t1-dualsync-repository.md` | 3 | 4 | TODO |
+| P3-T1 | `phase-3/p3-t1-dualsync-repository.md` | 3 | 4 | PASS |
 | P3-T2 | `phase-3/p3-t2-parallel-tx-timeout.md` | 3 | 4 | TODO |
 | P3-T3 | `phase-3/p3-t3-rollback-error-codes.md` | 3 | 4 | TODO |
 | P3-T4 | `phase-3/p3-t4-single-side-compensation-alerts.md` | 3 | 4 | TODO |

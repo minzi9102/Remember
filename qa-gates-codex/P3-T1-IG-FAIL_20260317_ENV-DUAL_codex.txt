@@ -1,0 +1,57 @@
+case_id: P3-T1-IG-FAIL
+steps -> visible result -> log proof -> conclusion
+runtime_mode: dual_sync
+env_id: ENV-DUAL
+### Browser `P3T1-ENV-DUAL-IG-FAIL` opened with pid 31484.
+- P3T1-ENV-DUAL-IG-FAIL:
+  - browser-type: msedge
+  - user-data-dir: <in-memory>
+  - headed: false
+---
+### Ran Playwright code
+```js
+await page.goto('http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=commit.append&rpc_fail=1');
+```
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=commit.append&rpc_fail=1
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T04-01-30-419Z.yml)
+### Result
+Video recording started.
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=commit.append&rpc_fail=1
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T04-01-33-033Z.yml)
+### Ran Playwright code
+```js
+await page.goto('http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.list');
+```
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.list
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T04-01-34-376Z.yml)
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.list
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T04-01-35-618Z.yml)
+### Result
+- [Video](qa-gates-codex\P3-T1-IG-FAIL_20260317_ENV-DUAL_codex.mp4)
+Browser 'P3T1-ENV-DUAL-IG-FAIL' closed
+
+
+[rust-proof]
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.75s
+     Running tests\p3_t1_dual_sync_repository.rs (src-tauri\target\debug\deps\p3_t1_dual_sync_repository-3662b75a78d742a7.exe)
+
+running 2 tests
+test p3_t1_dual_sync_reads_series_from_sqlite ... ok
+test p3_t1_dual_sync_keeps_commit_id_and_created_at_consistent ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+
+conclusion: PASS
