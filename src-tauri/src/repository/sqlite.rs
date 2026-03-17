@@ -4,11 +4,11 @@ use async_trait::async_trait;
 use sqlx::{sqlite::SqlitePool, FromRow, QueryBuilder, Sqlite};
 
 use super::{
-    encode_cursor, excerpt, map_sqlx_error, parse_cursor, validate_limit, validate_non_empty,
-    AppendCommitInput, AppendCommitResult, ArchiveSeriesInput, ArchiveSeriesResult, CommitRecord,
-    CreateSeriesInput, ListSeriesQuery, MarkSilentSeriesInput, MarkSilentSeriesResult,
-    MemoRepository, PagedResult, RepositoryError, SearchSeriesQuery, SeriesRecord, SeriesStatus,
-    TimelineQuery,
+    encode_cursor, excerpt, map_sqlx_error, maybe_inject_test_failure, parse_cursor,
+    validate_limit, validate_non_empty, AppendCommitInput, AppendCommitResult, ArchiveSeriesInput,
+    ArchiveSeriesResult, CommitRecord, CreateSeriesInput, ListSeriesQuery, MarkSilentSeriesInput,
+    MarkSilentSeriesResult, MemoRepository, PagedResult, RepositoryError, SearchSeriesQuery,
+    SeriesRecord, SeriesStatus, TimelineQuery,
 };
 
 #[derive(Debug, Clone)]
@@ -55,6 +55,7 @@ impl MemoRepository for SqliteRepository {
         let id = validate_non_empty(&input.id, "id")?;
         let name = validate_non_empty(&input.name, "name")?;
         let created_at = validate_non_empty(&input.created_at, "createdAt")?;
+        maybe_inject_test_failure("sqlite", "create_series", &id)?;
 
         sqlx::query(
             "INSERT INTO series (
@@ -159,6 +160,7 @@ impl MemoRepository for SqliteRepository {
                 "series `{series_id}` is archived and cannot receive new commits"
             )));
         }
+        maybe_inject_test_failure("sqlite", "append_commit", &commit_id)?;
 
         sqlx::query("INSERT INTO commits (id, series_id, content, created_at) VALUES (?, ?, ?, ?)")
             .bind(&commit_id)
@@ -290,6 +292,7 @@ impl MemoRepository for SqliteRepository {
             if status == SeriesStatus::Archived.as_db_value() && existing_archived_at.is_some() {
                 existing_archived_at.expect("checked is_some")
             } else {
+                maybe_inject_test_failure("sqlite", "archive_series", &series_id)?;
                 sqlx::query(
                     "UPDATE series
                      SET status = 'archived', archived_at = ?, last_updated_at = ?
@@ -329,6 +332,7 @@ impl MemoRepository for SqliteRepository {
         .fetch_all(&self.pool)
         .await
         .map_err(map_sqlx_error)?;
+        maybe_inject_test_failure("sqlite", "mark_silent_series", &threshold_before)?;
 
         if !affected_series_ids.is_empty() {
             let mut builder =

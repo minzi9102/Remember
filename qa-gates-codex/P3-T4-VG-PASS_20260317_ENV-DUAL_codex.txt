@@ -1,0 +1,130 @@
+case_id: P3-T4-VG-PASS
+steps -> visible result -> log proof -> conclusion
+runtime_mode: dual_sync
+env_id: ENV-DUAL
+run_date: 20260317
+
+$ playwright-cli -s=P3T4-ENV-DUAL-VG-PASS open http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.create --browser msedge
+### Browser `P3T4-ENV-DUAL-VG-PASS` opened with pid 34180.
+- P3T4-ENV-DUAL-VG-PASS:
+  - browser-type: msedge
+  - user-data-dir: <in-memory>
+  - headed: false
+---
+### Ran Playwright code
+```js
+await page.goto('http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.create');
+```
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.create
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T09-47-54-417Z.yml)
+
+$ playwright-cli -s=P3T4-ENV-DUAL-VG-PASS goto http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.create
+### Ran Playwright code
+```js
+await page.goto('http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.create');
+```
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.create
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T09-47-56-009Z.yml)
+
+$ playwright-cli -s=P3T4-ENV-DUAL-VG-PASS snapshot
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.create
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T09-47-57-301Z.yml)
+
+$ playwright-cli -s=P3T4-ENV-DUAL-VG-PASS goto http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=commit.append
+### Ran Playwright code
+```js
+await page.goto('http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=commit.append');
+```
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=commit.append
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T09-47-58-627Z.yml)
+
+$ playwright-cli -s=P3T4-ENV-DUAL-VG-PASS snapshot
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=commit.append
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T09-47-59-896Z.yml)
+
+$ playwright-cli -s=P3T4-ENV-DUAL-VG-PASS goto http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.archive
+### Ran Playwright code
+```js
+await page.goto('http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.archive');
+```
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.archive
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T09-48-01-275Z.yml)
+
+$ playwright-cli -s=P3T4-ENV-DUAL-VG-PASS snapshot
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.archive
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T09-48-02-564Z.yml)
+
+$ playwright-cli -s=P3T4-ENV-DUAL-VG-PASS goto http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.scan_silent
+### Ran Playwright code
+```js
+await page.goto('http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.scan_silent');
+```
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.scan_silent
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T09-48-03-997Z.yml)
+
+$ playwright-cli -s=P3T4-ENV-DUAL-VG-PASS snapshot
+### Page
+- Page URL: http://127.0.0.1:3000/?runtime_mode=dual_sync&rpc_path=series.scan_silent
+- Page Title: Tauri + React + Typescript
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-17T09-48-05-331Z.yml)
+
+$ playwright-cli -s=P3T4-ENV-DUAL-VG-PASS screenshot --filename qa-gates-codex\\P3-T4-VG-PASS_20260317_ENV-DUAL_codex.png --full-page
+### Result
+- [Screenshot of full page](qa-gates-codex\P3-T4-VG-PASS_20260317_ENV-DUAL_codex.png)
+### Ran Playwright code
+```js
+// Screenshot full page and save it as qa-gates-codex\P3-T4-VG-PASS_20260317_ENV-DUAL_codex.png
+await page.screenshot({
+fullPage: true,
+  path: 'qa-gates-codex\\P3-T4-VG-PASS_20260317_ENV-DUAL_codex.png',
+  scale: 'css',
+  type: 'png'
+});
+```
+
+$ playwright-cli -s=P3T4-ENV-DUAL-VG-PASS close
+Browser 'P3T4-ENV-DUAL-VG-PASS' closed
+
+
+[rust-proof]
+   Compiling tauri-app v0.1.0 (D:\BME2026\TECHNICAL\Remember\src-tauri)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.91s
+     Running tests\p3_t4_single_side_compensation_alerts.rs (src-tauri\target\debug\deps\p3_t4_single_side_compensation_alerts-c2e0240805d51414.exe)
+
+running 1 test
+p3_t4: verified postgres-side create failure alert
+p3_t4: verified sqlite-side create failure alert
+p3_t4: verified append single-side alert
+p3_t4: verified archive single-side alert
+p3_t4: verified mark_silent single-side alert
+test p3_t4_single_side_compensation_writes_and_resolves_consistency_alerts ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+
+conclusion: PASS

@@ -11,7 +11,7 @@
 {"task_name":"实现 `DualSyncRepository`（统一 `commit_id + created_at`）。","completed":true}
 {"task_name":"并行事务写入并设置 Postgres 3s 超时。","completed":true}
 {"task_name":"失败时双边回滚并返回 `PG_TIMEOUT` / `DUAL_WRITE_FAILED`。","completed":true}
-{"task_name":"注入单边成功场景并写入 `consistency_alerts`。","completed":false}
+{"task_name":"注入单边成功场景并写入 `consistency_alerts`。","completed":true}
 {"task_name":"启动时执行自愈扫描与补偿修复。","completed":false}
 {"task_name":"接入全局热键呼出/隐藏。","completed":false}
 {"task_name":"实现一级列表与二级时间线视图切换。","completed":false}

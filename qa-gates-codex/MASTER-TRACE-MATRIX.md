@@ -15,7 +15,7 @@
 | P3-T1 | `phase-3/p3-t1-dualsync-repository.md` | 3 | 4 | PASS |
 | P3-T2 | `phase-3/p3-t2-parallel-tx-timeout.md` | 3 | 4 | TODO |
 | P3-T3 | `phase-3/p3-t3-rollback-error-codes.md` | 3 | 4 | TODO |
-| P3-T4 | `phase-3/p3-t4-single-side-compensation-alerts.md` | 3 | 4 | TODO |
+| P3-T4 | `phase-3/p3-t4-single-side-compensation-alerts.md` | 3 | 4 | PASS |
 | P3-T5 | `phase-3/p3-t5-startup-self-heal.md` | 3 | 4 | TODO |
 | P4-T1 | `phase-4/p4-t1-global-hotkey.md` | 4 | 4 | TODO |
 | P4-T2 | `phase-4/p4-t2-list-timeline-navigation.md` | 4 | 4 | TODO |

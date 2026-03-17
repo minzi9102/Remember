@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
-pub mod migrations;
 mod dual_sync;
+pub mod migrations;
 mod postgres;
 mod sqlite;
 
@@ -20,6 +20,7 @@ pub use sqlite::SqliteRepository;
 
 const DEFAULT_PAGE_LIMIT: u64 = 50;
 const MAX_PAGE_LIMIT: u64 = 200;
+const TEST_FAILURE_INJECTION_ENV: &str = "REMEMBER_TEST_REPOSITORY_INJECT_FAILURE";
 
 #[derive(Debug, Clone)]
 pub struct RepositoryLayer {
@@ -345,6 +346,39 @@ pub(crate) fn map_sqlx_error(error: sqlx::Error) -> RepositoryError {
         sqlx::Error::Database(db_error) => map_database_error(db_error),
         other => RepositoryError::storage(format!("database operation failed: {other}")),
     }
+}
+
+pub(crate) fn maybe_inject_test_failure(
+    backend: &str,
+    operation: &str,
+    key: &str,
+) -> Result<(), RepositoryError> {
+    let Ok(raw) = std::env::var(TEST_FAILURE_INJECTION_ENV) else {
+        return Ok(());
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+
+    let mut parts = trimmed.splitn(3, '|');
+    let Some(expected_backend) = parts.next() else {
+        return Ok(());
+    };
+    let Some(expected_operation) = parts.next() else {
+        return Ok(());
+    };
+    let Some(expected_key) = parts.next() else {
+        return Ok(());
+    };
+
+    if expected_backend == backend && expected_operation == operation && expected_key == key {
+        return Err(RepositoryError::storage(format!(
+            "injected {backend} failure for {operation} on key `{key}`"
+        )));
+    }
+
+    Ok(())
 }
 
 fn map_database_error(error: Box<dyn sqlx::error::DatabaseError>) -> RepositoryError {

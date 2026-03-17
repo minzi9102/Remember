@@ -4,11 +4,11 @@ use async_trait::async_trait;
 use sqlx::{postgres::PgPool, FromRow, Postgres, QueryBuilder};
 
 use super::{
-    encode_cursor, excerpt, map_sqlx_error, parse_cursor, validate_limit, validate_non_empty,
-    AppendCommitInput, AppendCommitResult, ArchiveSeriesInput, ArchiveSeriesResult, CommitRecord,
-    CreateSeriesInput, ListSeriesQuery, MarkSilentSeriesInput, MarkSilentSeriesResult,
-    MemoRepository, PagedResult, RepositoryError, SearchSeriesQuery, SeriesRecord, SeriesStatus,
-    TimelineQuery,
+    encode_cursor, excerpt, map_sqlx_error, maybe_inject_test_failure, parse_cursor,
+    validate_limit, validate_non_empty, AppendCommitInput, AppendCommitResult, ArchiveSeriesInput,
+    ArchiveSeriesResult, CommitRecord, CreateSeriesInput, ListSeriesQuery, MarkSilentSeriesInput,
+    MarkSilentSeriesResult, MemoRepository, PagedResult, RepositoryError, SearchSeriesQuery,
+    SeriesRecord, SeriesStatus, TimelineQuery,
 };
 
 const SERIES_SELECT: &str = r#"
@@ -81,6 +81,7 @@ impl MemoRepository for PostgresRepository {
         let id = validate_non_empty(&input.id, "id")?;
         let name = validate_non_empty(&input.name, "name")?;
         let created_at = validate_non_empty(&input.created_at, "createdAt")?;
+        maybe_inject_test_failure("postgres", "create_series", &id)?;
 
         let mut tx = self.pool.begin().await.map_err(map_sqlx_error)?;
         apply_postgres_write_timeout(&mut tx).await?;
@@ -187,6 +188,7 @@ impl MemoRepository for PostgresRepository {
                 "series `{series_id}` is archived and cannot receive new commits"
             )));
         }
+        maybe_inject_test_failure("postgres", "append_commit", &commit_id)?;
 
         sqlx::query(
             "INSERT INTO commits (id, series_id, content, created_at)
@@ -314,6 +316,7 @@ impl MemoRepository for PostgresRepository {
         {
             existing_archived_at.expect("checked is_some")
         } else {
+            maybe_inject_test_failure("postgres", "archive_series", &series_id)?;
             sqlx::query(
                     "UPDATE series
                      SET status = 'archived', archived_at = $1::timestamptz, last_updated_at = $1::timestamptz
@@ -355,6 +358,7 @@ impl MemoRepository for PostgresRepository {
         .fetch_all(&mut *tx)
         .await
         .map_err(map_sqlx_error)?;
+        maybe_inject_test_failure("postgres", "mark_silent_series", &threshold_before)?;
 
         if !affected_series_ids.is_empty() {
             let mut builder =

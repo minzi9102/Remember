@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 
 use async_trait::async_trait;
+use chrono::{SecondsFormat, Utc};
 use sqlx::{postgres::PgPool, sqlite::SqlitePool};
+use uuid::Uuid;
 
 use super::{
     map_sqlx_error, AppendCommitInput, AppendCommitResult, ArchiveSeriesInput, ArchiveSeriesResult,
@@ -9,6 +11,8 @@ use super::{
     MemoRepository, PagedResult, PostgresRepository, RepositoryError, SearchSeriesQuery,
     SeriesRecord, SqliteRepository, TimelineQuery,
 };
+
+const POSTGRES_SNAPSHOT_TIMEOUT_SQL: &str = "SET LOCAL statement_timeout = '3s'";
 
 #[derive(Debug, Clone)]
 pub struct DualSyncRepository {
@@ -79,6 +83,12 @@ impl DualSyncRepository {
         &self,
         series_id: &str,
     ) -> Result<SeriesSnapshot, RepositoryError> {
+        let mut tx = self.postgres.pool().begin().await.map_err(map_sqlx_error)?;
+        sqlx::query(POSTGRES_SNAPSHOT_TIMEOUT_SQL)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_error)?;
+
         let row: Option<(String, String, String, Option<String>)> = sqlx::query_as(
             "SELECT
                 status,
@@ -92,7 +102,7 @@ impl DualSyncRepository {
              WHERE id = $1",
         )
         .bind(series_id)
-        .fetch_optional(self.postgres.pool())
+        .fetch_optional(&mut *tx)
         .await
         .map_err(map_sqlx_error)?;
 
@@ -290,6 +300,124 @@ impl DualSyncRepository {
         tx.commit().await.map_err(map_sqlx_error)?;
         Ok(())
     }
+
+    async fn write_consistency_alert(
+        &self,
+        op_type: &str,
+        commit_id: &str,
+        reason: &str,
+    ) -> Option<String> {
+        let alert_id = Uuid::now_v7().to_string();
+        let created_at = now_utc_rfc3339_seconds();
+
+        let sqlite_result = sqlx::query(
+            "INSERT INTO consistency_alerts (id, op_type, commit_id, reason, created_at, resolved_at)
+             VALUES (?, ?, ?, ?, ?, NULL)",
+        )
+        .bind(&alert_id)
+        .bind(op_type)
+        .bind(commit_id)
+        .bind(reason)
+        .bind(&created_at)
+        .execute(self.sqlite.pool())
+        .await
+        .map_err(map_sqlx_error);
+
+        if let Err(error) = &sqlite_result {
+            tracing::error!(
+                component = "repository",
+                operation = op_type,
+                backend = "sqlite",
+                error = %error,
+                "failed to persist consistency alert"
+            );
+        }
+
+        let postgres_result = sqlx::query(
+            "INSERT INTO consistency_alerts (id, op_type, commit_id, reason, created_at, resolved_at)
+             VALUES ($1, $2, $3, $4, $5::timestamptz, NULL)",
+        )
+        .bind(&alert_id)
+        .bind(op_type)
+        .bind(commit_id)
+        .bind(reason)
+        .bind(&created_at)
+        .execute(self.postgres.pool())
+        .await
+        .map_err(map_sqlx_error);
+
+        if let Err(error) = &postgres_result {
+            tracing::error!(
+                component = "repository",
+                operation = op_type,
+                backend = "postgres",
+                error = %error,
+                "failed to persist consistency alert"
+            );
+        }
+
+        if sqlite_result.is_err() && postgres_result.is_err() {
+            tracing::warn!(
+                component = "repository",
+                operation = op_type,
+                commit_id,
+                "consistency alert was not persisted on either backend"
+            );
+            None
+        } else {
+            Some(alert_id)
+        }
+    }
+
+    async fn resolve_consistency_alert(&self, alert_id: &str, op_type: &str) {
+        let resolved_at = now_utc_rfc3339_seconds();
+
+        let sqlite_result = sqlx::query(
+            "UPDATE consistency_alerts
+             SET resolved_at = ?
+             WHERE id = ?
+               AND resolved_at IS NULL",
+        )
+        .bind(&resolved_at)
+        .bind(alert_id)
+        .execute(self.sqlite.pool())
+        .await
+        .map_err(map_sqlx_error);
+
+        if let Err(error) = sqlite_result {
+            tracing::error!(
+                component = "repository",
+                operation = op_type,
+                backend = "sqlite",
+                alert_id,
+                error = %error,
+                "failed to resolve consistency alert"
+            );
+        }
+
+        let postgres_result = sqlx::query(
+            "UPDATE consistency_alerts
+             SET resolved_at = $1::timestamptz
+             WHERE id = $2
+               AND resolved_at IS NULL",
+        )
+        .bind(&resolved_at)
+        .bind(alert_id)
+        .execute(self.postgres.pool())
+        .await
+        .map_err(map_sqlx_error);
+
+        if let Err(error) = postgres_result {
+            tracing::error!(
+                component = "repository",
+                operation = op_type,
+                backend = "postgres",
+                alert_id,
+                error = %error,
+                "failed to resolve consistency alert"
+            );
+        }
+    }
 }
 
 fn is_pg_timeout_error(error: &RepositoryError) -> bool {
@@ -357,6 +485,38 @@ fn build_single_side_failure(
     }
 }
 
+fn now_utc_rfc3339_seconds() -> String {
+    Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+
+fn build_mark_silent_batch_id(threshold_before: &str, affected_series_ids: &[String]) -> String {
+    let mut ids = affected_series_ids.to_vec();
+    ids.sort();
+    format!("mark_silent:{threshold_before}:{}", ids.join(","))
+}
+
+fn format_affected_series_ids(affected_series_ids: &[String]) -> String {
+    if affected_series_ids.is_empty() {
+        "<none>".to_string()
+    } else {
+        affected_series_ids.join(",")
+    }
+}
+
+fn build_consistency_alert_reason(
+    operation: &str,
+    succeeded_side: BackendSide,
+    failed_side: BackendSide,
+    operation_error: &RepositoryError,
+    detail: &str,
+) -> String {
+    format!(
+        "dual_sync {operation} single-side success; succeeded_side={}; failed_side={}; operation_error={operation_error}; detail={detail}",
+        succeeded_side.as_str(),
+        failed_side.as_str(),
+    )
+}
+
 #[async_trait]
 impl MemoRepository for DualSyncRepository {
     async fn create_series(
@@ -403,9 +563,23 @@ impl MemoRepository for DualSyncRepository {
                     error = %postgres_error,
                     "dual_sync single-side failure detected"
                 );
+                let alert_reason = build_consistency_alert_reason(
+                    "create_series",
+                    BackendSide::Sqlite,
+                    BackendSide::Postgres,
+                    &postgres_error,
+                    &format!("series_id={series_id}"),
+                );
+                let alert_id = self
+                    .write_consistency_alert("create_series", &series_id, &alert_reason)
+                    .await;
                 let compensation_result = self.rollback_sqlite_create_series(&series_id).await;
                 match compensation_result {
                     Ok(()) => {
+                        if let Some(alert_id) = alert_id.as_deref() {
+                            self.resolve_consistency_alert(alert_id, "create_series")
+                                .await;
+                        }
                         tracing::info!(
                             component = "repository",
                             operation = "create_series",
@@ -445,9 +619,23 @@ impl MemoRepository for DualSyncRepository {
                     error = %sqlite_error,
                     "dual_sync single-side failure detected"
                 );
+                let alert_reason = build_consistency_alert_reason(
+                    "create_series",
+                    BackendSide::Postgres,
+                    BackendSide::Sqlite,
+                    &sqlite_error,
+                    &format!("series_id={series_id}"),
+                );
+                let alert_id = self
+                    .write_consistency_alert("create_series", &series_id, &alert_reason)
+                    .await;
                 let compensation_result = self.rollback_postgres_create_series(&series_id).await;
                 match compensation_result {
                     Ok(()) => {
+                        if let Some(alert_id) = alert_id.as_deref() {
+                            self.resolve_consistency_alert(alert_id, "create_series")
+                                .await;
+                        }
                         tracing::info!(
                             component = "repository",
                             operation = "create_series",
@@ -540,11 +728,25 @@ impl MemoRepository for DualSyncRepository {
                     error = %postgres_error,
                     "dual_sync single-side failure detected"
                 );
+                let alert_reason = build_consistency_alert_reason(
+                    "append_commit",
+                    BackendSide::Sqlite,
+                    BackendSide::Postgres,
+                    &postgres_error,
+                    &format!("series_id={series_id}, commit_id={commit_id}"),
+                );
+                let alert_id = self
+                    .write_consistency_alert("append_commit", &commit_id, &alert_reason)
+                    .await;
                 let compensation_result = self
                     .rollback_sqlite_append_commit(&commit_id, &series_id, &sqlite_snapshot)
                     .await;
                 match compensation_result {
                     Ok(()) => {
+                        if let Some(alert_id) = alert_id.as_deref() {
+                            self.resolve_consistency_alert(alert_id, "append_commit")
+                                .await;
+                        }
                         tracing::info!(
                             component = "repository",
                             operation = "append_commit",
@@ -584,11 +786,25 @@ impl MemoRepository for DualSyncRepository {
                     error = %sqlite_error,
                     "dual_sync single-side failure detected"
                 );
+                let alert_reason = build_consistency_alert_reason(
+                    "append_commit",
+                    BackendSide::Postgres,
+                    BackendSide::Sqlite,
+                    &sqlite_error,
+                    &format!("series_id={series_id}, commit_id={commit_id}"),
+                );
+                let alert_id = self
+                    .write_consistency_alert("append_commit", &commit_id, &alert_reason)
+                    .await;
                 let compensation_result = self
                     .rollback_postgres_append_commit(&commit_id, &series_id, &postgres_snapshot)
                     .await;
                 match compensation_result {
                     Ok(()) => {
+                        if let Some(alert_id) = alert_id.as_deref() {
+                            self.resolve_consistency_alert(alert_id, "append_commit")
+                                .await;
+                        }
                         tracing::info!(
                             component = "repository",
                             operation = "append_commit",
@@ -680,11 +896,25 @@ impl MemoRepository for DualSyncRepository {
                     error = %postgres_error,
                     "dual_sync single-side failure detected"
                 );
+                let alert_reason = build_consistency_alert_reason(
+                    "archive_series",
+                    BackendSide::Sqlite,
+                    BackendSide::Postgres,
+                    &postgres_error,
+                    &format!("series_id={series_id}"),
+                );
+                let alert_id = self
+                    .write_consistency_alert("archive_series", &series_id, &alert_reason)
+                    .await;
                 let compensation_result = self
                     .restore_sqlite_series_snapshot(&series_id, &sqlite_snapshot)
                     .await;
                 match compensation_result {
                     Ok(()) => {
+                        if let Some(alert_id) = alert_id.as_deref() {
+                            self.resolve_consistency_alert(alert_id, "archive_series")
+                                .await;
+                        }
                         tracing::info!(
                             component = "repository",
                             operation = "archive_series",
@@ -724,11 +954,25 @@ impl MemoRepository for DualSyncRepository {
                     error = %sqlite_error,
                     "dual_sync single-side failure detected"
                 );
+                let alert_reason = build_consistency_alert_reason(
+                    "archive_series",
+                    BackendSide::Postgres,
+                    BackendSide::Sqlite,
+                    &sqlite_error,
+                    &format!("series_id={series_id}"),
+                );
+                let alert_id = self
+                    .write_consistency_alert("archive_series", &series_id, &alert_reason)
+                    .await;
                 let compensation_result = self
                     .restore_postgres_series_snapshot(&series_id, &postgres_snapshot)
                     .await;
                 match compensation_result {
                     Ok(()) => {
+                        if let Some(alert_id) = alert_id.as_deref() {
+                            self.resolve_consistency_alert(alert_id, "archive_series")
+                                .await;
+                        }
                         tracing::info!(
                             component = "repository",
                             operation = "archive_series",
@@ -766,6 +1010,7 @@ impl MemoRepository for DualSyncRepository {
         &self,
         input: MarkSilentSeriesInput,
     ) -> Result<MarkSilentSeriesResult, RepositoryError> {
+        let threshold_before = input.threshold_before.clone();
         let sqlite_future = self.sqlite.mark_silent_series(input.clone());
         let postgres_future = self.postgres.mark_silent_series(input);
         let (sqlite_result, postgres_result) = tokio::join!(sqlite_future, postgres_future);
@@ -803,11 +1048,33 @@ impl MemoRepository for DualSyncRepository {
                     error = %postgres_error,
                     "dual_sync single-side failure detected"
                 );
+                let batch_id = build_mark_silent_batch_id(
+                    &threshold_before,
+                    &sqlite_result.affected_series_ids,
+                );
+                let detail = format!(
+                    "threshold_before={threshold_before}, affected_series_ids={}",
+                    format_affected_series_ids(&sqlite_result.affected_series_ids)
+                );
+                let alert_reason = build_consistency_alert_reason(
+                    "mark_silent_series",
+                    BackendSide::Sqlite,
+                    BackendSide::Postgres,
+                    &postgres_error,
+                    &detail,
+                );
+                let alert_id = self
+                    .write_consistency_alert("mark_silent_series", &batch_id, &alert_reason)
+                    .await;
                 let compensation_result = self
                     .rollback_sqlite_mark_silent_series(&sqlite_result.affected_series_ids)
                     .await;
                 match compensation_result {
                     Ok(()) => {
+                        if let Some(alert_id) = alert_id.as_deref() {
+                            self.resolve_consistency_alert(alert_id, "mark_silent_series")
+                                .await;
+                        }
                         tracing::info!(
                             component = "repository",
                             operation = "mark_silent_series",
@@ -847,11 +1114,33 @@ impl MemoRepository for DualSyncRepository {
                     error = %sqlite_error,
                     "dual_sync single-side failure detected"
                 );
+                let batch_id = build_mark_silent_batch_id(
+                    &threshold_before,
+                    &postgres_result.affected_series_ids,
+                );
+                let detail = format!(
+                    "threshold_before={threshold_before}, affected_series_ids={}",
+                    format_affected_series_ids(&postgres_result.affected_series_ids)
+                );
+                let alert_reason = build_consistency_alert_reason(
+                    "mark_silent_series",
+                    BackendSide::Postgres,
+                    BackendSide::Sqlite,
+                    &sqlite_error,
+                    &detail,
+                );
+                let alert_id = self
+                    .write_consistency_alert("mark_silent_series", &batch_id, &alert_reason)
+                    .await;
                 let compensation_result = self
                     .rollback_postgres_mark_silent_series(&postgres_result.affected_series_ids)
                     .await;
                 match compensation_result {
                     Ok(()) => {
+                        if let Some(alert_id) = alert_id.as_deref() {
+                            self.resolve_consistency_alert(alert_id, "mark_silent_series")
+                                .await;
+                        }
                         tracing::info!(
                             component = "repository",
                             operation = "mark_silent_series",
