@@ -333,6 +333,8 @@ fn map_application_error(error: ApplicationError) -> RpcError {
         ApplicationError::NotFound(message) => RpcError::not_found(message),
         ApplicationError::Conflict(message) => RpcError::conflict(message),
         ApplicationError::NotImplemented(message) => RpcError::not_implemented(message),
+        ApplicationError::PgTimeout(message) => RpcError::pg_timeout(message),
+        ApplicationError::DualWriteFailed(message) => RpcError::dual_write_failed(message),
         ApplicationError::Internal(message) => RpcError::internal(message),
     }
 }
@@ -417,7 +419,7 @@ mod tests {
     };
     use crate::application::{
         config::{AppConfig, RuntimeConfigState, RuntimeMode},
-        service::build_test_service_state,
+        service::{build_test_service_state, ApplicationError},
     };
 
     #[tokio::test]
@@ -680,6 +682,22 @@ mod tests {
         assert!(envelope.ok, "dual_sync mode should execute command");
         assert_eq!(envelope.meta.runtime_mode, "dual_sync");
         assert!(envelope.error.is_none());
+    }
+
+    #[test]
+    fn maps_application_pg_timeout_to_rpc_pg_timeout() {
+        let rpc_error = super::map_application_error(ApplicationError::PgTimeout(
+            "simulated timeout".to_string(),
+        ));
+        assert_eq!(rpc_error.code, PG_TIMEOUT_CODE);
+    }
+
+    #[test]
+    fn maps_application_dual_write_failed_to_rpc_dual_write_failed() {
+        let rpc_error = super::map_application_error(ApplicationError::DualWriteFailed(
+            "simulated dual write failure".to_string(),
+        ));
+        assert_eq!(rpc_error.code, DUAL_WRITE_FAILED_CODE);
     }
 
     fn test_state() -> RuntimeConfigState {

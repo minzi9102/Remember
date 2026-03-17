@@ -45,6 +45,8 @@ pub enum ApplicationError {
     NotFound(String),
     Conflict(String),
     NotImplemented(String),
+    PgTimeout(String),
+    DualWriteFailed(String),
     Internal(String),
 }
 
@@ -65,6 +67,8 @@ impl fmt::Display for ApplicationError {
             Self::NotFound(message) => write!(f, "not found: {message}"),
             Self::Conflict(message) => write!(f, "conflict: {message}"),
             Self::NotImplemented(message) => write!(f, "not implemented: {message}"),
+            Self::PgTimeout(message) => write!(f, "postgres timeout: {message}"),
+            Self::DualWriteFailed(message) => write!(f, "dual write failed: {message}"),
             Self::Internal(message) => write!(f, "internal error: {message}"),
         }
     }
@@ -79,6 +83,8 @@ impl From<RepositoryError> for ApplicationError {
             RepositoryError::NotFound(message) => Self::NotFound(message),
             RepositoryError::Conflict(message) => Self::Conflict(message),
             RepositoryError::NotImplemented(message) => Self::NotImplemented(message),
+            RepositoryError::PgTimeout(message) => Self::PgTimeout(message),
+            RepositoryError::DualWriteFailed(message) => Self::DualWriteFailed(message),
             RepositoryError::Storage(message) => Self::Internal(message),
         }
     }

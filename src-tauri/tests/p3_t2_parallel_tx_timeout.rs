@@ -105,8 +105,8 @@ async fn p3_t2_dual_sync_enforces_postgres_statement_timeout_and_recovers() {
 
 fn assert_timeout_error(error: RepositoryError) {
     let message = match error {
-        RepositoryError::Storage(message) => message,
-        other => panic!("expected storage error for timeout, got {other:?}"),
+        RepositoryError::PgTimeout(message) | RepositoryError::Storage(message) => message,
+        other => panic!("expected pg timeout/storage error for timeout, got {other:?}"),
     };
     let normalized = message.to_ascii_lowercase();
     assert!(

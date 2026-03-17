@@ -230,6 +230,8 @@ pub enum RepositoryError {
     NotFound(String),
     Conflict(String),
     NotImplemented(String),
+    PgTimeout(String),
+    DualWriteFailed(String),
     Storage(String),
 }
 
@@ -250,6 +252,14 @@ impl RepositoryError {
         Self::NotImplemented(message.into())
     }
 
+    pub fn pg_timeout(message: impl Into<String>) -> Self {
+        Self::PgTimeout(message.into())
+    }
+
+    pub fn dual_write_failed(message: impl Into<String>) -> Self {
+        Self::DualWriteFailed(message.into())
+    }
+
     pub fn storage(message: impl Into<String>) -> Self {
         Self::Storage(message.into())
     }
@@ -262,6 +272,8 @@ impl fmt::Display for RepositoryError {
             Self::NotFound(message) => write!(f, "not found: {message}"),
             Self::Conflict(message) => write!(f, "conflict: {message}"),
             Self::NotImplemented(message) => write!(f, "not implemented: {message}"),
+            Self::PgTimeout(message) => write!(f, "postgres timeout: {message}"),
+            Self::DualWriteFailed(message) => write!(f, "dual write failed: {message}"),
             Self::Storage(message) => write!(f, "storage error: {message}"),
         }
     }
@@ -338,6 +350,15 @@ pub(crate) fn map_sqlx_error(error: sqlx::Error) -> RepositoryError {
 fn map_database_error(error: Box<dyn sqlx::error::DatabaseError>) -> RepositoryError {
     let message = error.message().to_string();
     let code = error.code().map(|value| value.to_string());
+
+    if matches!(code.as_deref(), Some("57014"))
+        || message
+            .to_ascii_lowercase()
+            .contains("canceling statement due to statement timeout")
+    {
+        return RepositoryError::pg_timeout(message);
+    }
+
     if matches!(code.as_deref(), Some("23505")) || message.contains("UNIQUE constraint failed") {
         return RepositoryError::conflict(message);
     }
