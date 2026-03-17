@@ -35,6 +35,8 @@ SELECT
 FROM commits
 "#;
 
+const POSTGRES_WRITE_TIMEOUT_SQL: &str = "SET LOCAL statement_timeout = '3s'";
+
 #[derive(Debug, Clone)]
 pub struct PostgresRepository {
     pool: PgPool,
@@ -80,6 +82,9 @@ impl MemoRepository for PostgresRepository {
         let name = validate_non_empty(&input.name, "name")?;
         let created_at = validate_non_empty(&input.created_at, "createdAt")?;
 
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_error)?;
+        apply_postgres_write_timeout(&mut tx).await?;
+
         sqlx::query(
             "INSERT INTO series (
                 id,
@@ -94,11 +99,20 @@ impl MemoRepository for PostgresRepository {
         .bind(&id)
         .bind(&name)
         .bind(&created_at)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(map_sqlx_error)?;
 
-        fetch_series_by_id(&self.pool, &id).await
+        let select_sql = format!("{SERIES_SELECT} WHERE id = $1");
+        let row: SeriesRow = sqlx::query_as(&select_sql)
+            .bind(&id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_sqlx_error)?;
+
+        tx.commit().await.map_err(map_sqlx_error)?;
+
+        series_from_row(row)
     }
 
     async fn list_series(
@@ -156,6 +170,7 @@ impl MemoRepository for PostgresRepository {
         let latest_excerpt = excerpt(&content);
 
         let mut tx = self.pool.begin().await.map_err(map_sqlx_error)?;
+        apply_postgres_write_timeout(&mut tx).await?;
 
         let status: Option<String> = sqlx::query_scalar("SELECT status FROM series WHERE id = $1")
             .bind(&series_id)
@@ -272,6 +287,7 @@ impl MemoRepository for PostgresRepository {
         let archived_at = validate_non_empty(&input.archived_at, "archivedAt")?;
 
         let mut tx = self.pool.begin().await.map_err(map_sqlx_error)?;
+        apply_postgres_write_timeout(&mut tx).await?;
 
         let existing: Option<(String, Option<String>)> = sqlx::query_as(
             "SELECT
@@ -325,6 +341,9 @@ impl MemoRepository for PostgresRepository {
     ) -> Result<MarkSilentSeriesResult, RepositoryError> {
         let threshold_before = validate_non_empty(&input.threshold_before, "thresholdBefore")?;
 
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_error)?;
+        apply_postgres_write_timeout(&mut tx).await?;
+
         let affected_series_ids: Vec<String> = sqlx::query_scalar(
             "SELECT id
              FROM series
@@ -333,7 +352,7 @@ impl MemoRepository for PostgresRepository {
              ORDER BY id",
         )
         .bind(&threshold_before)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *tx)
         .await
         .map_err(map_sqlx_error)?;
 
@@ -349,10 +368,12 @@ impl MemoRepository for PostgresRepository {
             builder.push(")");
             builder
                 .build()
-                .execute(&self.pool)
+                .execute(&mut *tx)
                 .await
                 .map_err(map_sqlx_error)?;
         }
+
+        tx.commit().await.map_err(map_sqlx_error)?;
 
         Ok(MarkSilentSeriesResult {
             affected_series_ids,
@@ -406,6 +427,16 @@ fn commit_from_row(row: CommitRow) -> CommitRecord {
         content: row.content,
         created_at: row.created_at,
     }
+}
+
+async fn apply_postgres_write_timeout(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+) -> Result<(), RepositoryError> {
+    sqlx::query(POSTGRES_WRITE_TIMEOUT_SQL)
+        .execute(&mut **tx)
+        .await
+        .map_err(map_sqlx_error)?;
+    Ok(())
 }
 
 async fn fetch_series_by_id(pool: &PgPool, id: &str) -> Result<SeriesRecord, RepositoryError> {

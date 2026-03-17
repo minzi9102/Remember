@@ -31,10 +31,15 @@ impl MemoRepository for DualSyncRepository {
         &self,
         input: CreateSeriesInput,
     ) -> Result<SeriesRecord, RepositoryError> {
-        let sqlite_record = self.sqlite.create_series(input.clone()).await?;
-        let postgres_record = self.postgres.create_series(input).await?;
+        let sqlite_future = self.sqlite.create_series(input.clone());
+        let postgres_future = self.postgres.create_series(input);
+        let (sqlite_result, postgres_result) = tokio::join!(sqlite_future, postgres_future);
+        let sqlite_record = sqlite_result?;
+        let postgres_record = postgres_result?;
 
-        if sqlite_record.id != postgres_record.id || sqlite_record.created_at != postgres_record.created_at {
+        if sqlite_record.id != postgres_record.id
+            || sqlite_record.created_at != postgres_record.created_at
+        {
             return Err(RepositoryError::storage(
                 "dual_sync create_series produced inconsistent id/created_at between sqlite and postgres",
             ));
@@ -54,8 +59,11 @@ impl MemoRepository for DualSyncRepository {
         &self,
         input: AppendCommitInput,
     ) -> Result<AppendCommitResult, RepositoryError> {
-        let sqlite_result = self.sqlite.append_commit(input.clone()).await?;
-        let postgres_result = self.postgres.append_commit(input).await?;
+        let sqlite_future = self.sqlite.append_commit(input.clone());
+        let postgres_future = self.postgres.append_commit(input);
+        let (sqlite_result, postgres_result) = tokio::join!(sqlite_future, postgres_future);
+        let sqlite_result = sqlite_result?;
+        let postgres_result = postgres_result?;
 
         if sqlite_result.commit.id != postgres_result.commit.id
             || sqlite_result.commit.created_at != postgres_result.commit.created_at
@@ -79,8 +87,11 @@ impl MemoRepository for DualSyncRepository {
         &self,
         input: ArchiveSeriesInput,
     ) -> Result<ArchiveSeriesResult, RepositoryError> {
-        let sqlite_result = self.sqlite.archive_series(input.clone()).await?;
-        let postgres_result = self.postgres.archive_series(input).await?;
+        let sqlite_future = self.sqlite.archive_series(input.clone());
+        let postgres_future = self.postgres.archive_series(input);
+        let (sqlite_result, postgres_result) = tokio::join!(sqlite_future, postgres_future);
+        let sqlite_result = sqlite_result?;
+        let postgres_result = postgres_result?;
 
         if sqlite_result.series_id != postgres_result.series_id
             || sqlite_result.archived_at != postgres_result.archived_at
@@ -97,8 +108,11 @@ impl MemoRepository for DualSyncRepository {
         &self,
         input: MarkSilentSeriesInput,
     ) -> Result<MarkSilentSeriesResult, RepositoryError> {
-        let sqlite_result = self.sqlite.mark_silent_series(input.clone()).await?;
-        let postgres_result = self.postgres.mark_silent_series(input).await?;
+        let sqlite_future = self.sqlite.mark_silent_series(input.clone());
+        let postgres_future = self.postgres.mark_silent_series(input);
+        let (sqlite_result, postgres_result) = tokio::join!(sqlite_future, postgres_future);
+        let sqlite_result = sqlite_result?;
+        let postgres_result = postgres_result?;
 
         if sqlite_result.affected_series_ids != postgres_result.affected_series_ids {
             return Err(RepositoryError::storage(

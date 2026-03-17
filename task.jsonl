@@ -9,7 +9,7 @@
 {"task_name":"按 `runtime_mode` 注入后端实现。","completed":true}
 {"task_name":"完成基础读写与查询测试。","completed":true}
 {"task_name":"实现 `DualSyncRepository`（统一 `commit_id + created_at`）。","completed":true}
-{"task_name":"并行事务写入并设置 Postgres 3s 超时。","completed":false}
+{"task_name":"并行事务写入并设置 Postgres 3s 超时。","completed":true}
 {"task_name":"失败时双边回滚并返回 `PG_TIMEOUT` / `DUAL_WRITE_FAILED`。","completed":false}
 {"task_name":"注入单边成功场景并写入 `consistency_alerts`。","completed":false}
 {"task_name":"启动时执行自愈扫描与补偿修复。","completed":false}
