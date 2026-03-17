@@ -1,12 +1,20 @@
+import type { RefObject } from "react";
+
 import { findSeriesById } from "../application/shell-view-model";
 import type { CommitItem, ShellState } from "../application/types";
 
 interface RememberShellProps {
   shell: ShellState;
+  searchInputRef?: RefObject<HTMLInputElement | null>;
+  createSeriesInputRef?: RefObject<HTMLInputElement | null>;
+  commitInputRef?: RefObject<HTMLInputElement | null>;
   onSelectSeries: (seriesId: string) => void;
   onOpenTimeline: (seriesId: string) => void;
   onBackToList: () => void;
   onRetryTimeline: () => void;
+  onSearchQueryChange: (query: string) => void;
+  onNewSeriesNameDraftChange: (value: string) => void;
+  onCommitDraftChange: (value: string) => void;
 }
 
 export function RememberShellLoading() {
@@ -22,10 +30,16 @@ export function RememberShellLoading() {
 
 export function RememberShell({
   shell,
+  searchInputRef,
+  createSeriesInputRef,
+  commitInputRef,
   onSelectSeries,
   onOpenTimeline,
   onBackToList,
   onRetryTimeline,
+  onSearchQueryChange,
+  onNewSeriesNameDraftChange,
+  onCommitDraftChange,
 }: RememberShellProps) {
   const startupSelfHeal = shell.commandProbe.envelope.meta.startupSelfHeal;
   const selectedSeries = findSeriesById(shell.seriesList, shell.selectedSeriesId);
@@ -54,13 +68,72 @@ export function RememberShell({
                 <p className="panel-kicker">Level 1</p>
                 <h2>Series</h2>
               </div>
-              <p className="panel-hint">Single click selects. Double click drills into the timeline.</p>
+              <p className="panel-hint">
+                `↑/↓` select, `→` opens timeline, `/` searches, `Shift+N` creates, `a` archives
+                silent, type to capture.
+              </p>
             </div>
 
             {shell.navigationError !== null ? (
               <div className="config-warning-banner" data-testid="series-list-error">
                 <strong>{shell.navigationError.code}</strong>
                 <p>{shell.navigationError.message}</p>
+              </div>
+            ) : null}
+
+            {shell.interactionFeedback !== null ? (
+              <div className="config-warning-banner interaction-feedback" data-testid="interaction-feedback-banner">
+                <strong>{shell.interactionFeedback.code}</strong>
+                <p>{shell.interactionFeedback.message}</p>
+              </div>
+            ) : null}
+
+            {shell.interactionMode === "search" ? (
+              <div className="command-surface" data-testid="search-command-bar">
+                <label className="command-label" htmlFor="series-search-input">
+                  Search series
+                </label>
+                <input
+                  id="series-search-input"
+                  ref={searchInputRef}
+                  className="command-input"
+                  data-testid="search-command-input"
+                  type="text"
+                  value={shell.searchQuery}
+                  onChange={(event) => onSearchQueryChange(event.target.value)}
+                  placeholder="Type to filter series names"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <p className="command-help">
+                  Esc closes search and restores the full list.
+                  {shell.pendingAction === "search" ? " Searching..." : ""}
+                </p>
+              </div>
+            ) : null}
+
+            {shell.interactionMode === "create_series" ? (
+              <div className="command-surface" data-testid="create-series-command-bar">
+                <label className="command-label" htmlFor="series-create-input">
+                  Create a new series
+                </label>
+                <input
+                  id="series-create-input"
+                  ref={createSeriesInputRef}
+                  className="command-input"
+                  data-testid="create-series-command-input"
+                  type="text"
+                  value={shell.newSeriesNameDraft}
+                  onChange={(event) => onNewSeriesNameDraftChange(event.target.value)}
+                  placeholder="Series name"
+                  autoComplete="off"
+                  spellCheck={false}
+                  disabled={shell.pendingAction === "create_series"}
+                />
+                <p className="command-help">
+                  Enter creates the series. Esc cancels.
+                  {shell.pendingAction === "create_series" ? " Creating..." : ""}
+                </p>
               </div>
             ) : null}
 
@@ -106,6 +179,37 @@ export function RememberShell({
                 })}
               </ul>
             )}
+
+            {shell.interactionMode === "draft_commit" ? (
+              <div className="command-surface command-surface-compose" data-testid="commit-draft-command-bar">
+                <label className="command-label" htmlFor="commit-draft-input">
+                  Append commit to {selectedSeries?.name ?? "the selected series"}
+                </label>
+                <input
+                  id="commit-draft-input"
+                  ref={commitInputRef}
+                  className="command-input"
+                  data-testid="commit-draft-command-input"
+                  type="text"
+                  value={shell.commitDraft}
+                  onChange={(event) => onCommitDraftChange(event.target.value)}
+                  placeholder="Type a commit and press Enter"
+                  autoComplete="off"
+                  spellCheck={false}
+                  disabled={shell.pendingAction === "append_commit"}
+                />
+                <p className="command-help">
+                  Enter submits the commit. Esc cancels.
+                  {shell.pendingAction === "append_commit" ? " Saving..." : ""}
+                </p>
+              </div>
+            ) : null}
+
+            {shell.pendingAction === "archive_series" ? (
+              <p className="command-status" data-testid="archive-pending-status">
+                Archiving the selected silent series...
+              </p>
+            ) : null}
           </article>
         ) : (
           <article className="panel stage-panel" data-testid="timeline-panel">
@@ -114,14 +218,17 @@ export function RememberShell({
                 <p className="panel-kicker">Level 2</p>
                 <h2>{shell.activeTimelineSeries?.name ?? "Timeline"}</h2>
               </div>
-              <button
-                type="button"
-                className="back-button"
-                data-testid="timeline-back-button"
-                onClick={onBackToList}
-              >
-                Back to list
-              </button>
+              <div className="timeline-heading-actions">
+                <p className="panel-hint timeline-hint">Read-only timeline. `←` or `Esc` returns.</p>
+                <button
+                  type="button"
+                  className="back-button"
+                  data-testid="timeline-back-button"
+                  onClick={onBackToList}
+                >
+                  Back to list
+                </button>
+              </div>
             </div>
 
             {shell.timelineLoadState === "loading" ? (

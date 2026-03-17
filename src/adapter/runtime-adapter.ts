@@ -102,7 +102,8 @@ export function parseNativeRuntimeStatusFromTitle(title: string): RuntimeStatus 
 
 export async function readRuntimeStatus(): Promise<RuntimeStatus> {
   if (!isTauriRuntime()) {
-    return parseMockRuntimeStatus(window.location.search);
+    const search = typeof window === "undefined" ? "" : window.location.search;
+    return parseMockRuntimeStatus(search);
   }
 
   try {
@@ -165,6 +166,21 @@ export function readMockSeriesList(
   ) as RpcEnvelope<SeriesListData>;
 }
 
+export function readMockCreateSeries(
+  search: string,
+  name: string,
+): RpcEnvelope<SeriesCreateData> {
+  const runtimeStatus = parseMockRuntimeStatus(search);
+  const mockRequest = buildMockRequest(search, "series.create", { name });
+
+  return mockInvoke(
+    "series.create",
+    mockRequest.payload,
+    runtimeStatus,
+    mockRequest.startupSelfHeal,
+  ) as RpcEnvelope<SeriesCreateData>;
+}
+
 export function readMockTimeline(
   search: string,
   seriesId: string,
@@ -184,10 +200,50 @@ export function readMockTimeline(
   ) as RpcEnvelope<TimelineListData>;
 }
 
+export function readMockAppendCommit(
+  search: string,
+  seriesId: string,
+  content: string,
+  clientTs: string,
+): RpcEnvelope<CommitAppendData> {
+  const runtimeStatus = parseMockRuntimeStatus(search);
+  const mockRequest = buildMockRequest(search, "commit.append", {
+    seriesId,
+    content,
+    clientTs,
+  });
+
+  return mockInvoke(
+    "commit.append",
+    mockRequest.payload,
+    runtimeStatus,
+    mockRequest.startupSelfHeal,
+  ) as RpcEnvelope<CommitAppendData>;
+}
+
+export function readMockArchiveSeries(
+  search: string,
+  seriesId: string,
+): RpcEnvelope<SeriesArchiveData> {
+  const runtimeStatus = parseMockRuntimeStatus(search);
+  const mockRequest = buildMockRequest(search, "series.archive", { seriesId });
+
+  return mockInvoke(
+    "series.archive",
+    mockRequest.payload,
+    runtimeStatus,
+    mockRequest.startupSelfHeal,
+  ) as RpcEnvelope<SeriesArchiveData>;
+}
+
 export async function loadSeriesList(
   request: SeriesListRequest,
 ): Promise<RpcEnvelope<SeriesListData>> {
   return invokeRpcEnvelope<SeriesListData>("series.list", { ...request });
+}
+
+export async function createSeries(name: string): Promise<RpcEnvelope<SeriesCreateData>> {
+  return invokeRpcEnvelope<SeriesCreateData>("series.create", { name });
 }
 
 export async function loadTimeline(
@@ -197,6 +253,26 @@ export async function loadTimeline(
   return invokeRpcEnvelope<TimelineListData>("timeline.list", {
     seriesId,
     ...request,
+  });
+}
+
+export async function appendCommit(
+  seriesId: string,
+  content: string,
+  clientTs: string,
+): Promise<RpcEnvelope<CommitAppendData>> {
+  return invokeRpcEnvelope<CommitAppendData>("commit.append", {
+    seriesId,
+    content,
+    clientTs,
+  });
+}
+
+export async function archiveSeries(
+  seriesId: string,
+): Promise<RpcEnvelope<SeriesArchiveData>> {
+  return invokeRpcEnvelope<SeriesArchiveData>("series.archive", {
+    seriesId,
   });
 }
 

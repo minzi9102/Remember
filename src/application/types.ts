@@ -4,6 +4,8 @@ export type RuntimeSource = "native" | "mock";
 export type SeriesStatus = "active" | "silent" | "archived";
 export type ShellView = "series_list" | "timeline";
 export type TimelineLoadState = "idle" | "loading" | "ready" | "error";
+export type ShellInteractionMode = "browse" | "search" | "create_series" | "draft_commit";
+export type PendingShellAction = "search" | "create_series" | "append_commit" | "archive_series";
 
 export interface LayerHealth {
   adapter: LayerState;
@@ -122,4 +124,10 @@ export interface ShellState {
   timelineLoadState: TimelineLoadState;
   timelineItems: CommitItem[];
   navigationError: RpcError | null;
+  interactionMode: ShellInteractionMode;
+  searchQuery: string;
+  newSeriesNameDraft: string;
+  commitDraft: string;
+  pendingAction: PendingShellAction | null;
+  interactionFeedback: RpcError | null;
 }

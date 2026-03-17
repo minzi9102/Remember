@@ -119,10 +119,21 @@ button {
 
 .panel-hint {
   margin: 0;
-  max-width: 260px;
+  max-width: 360px;
   color: #78716c;
   text-align: right;
   font-size: 0.92rem;
+}
+
+.timeline-heading-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.timeline-hint {
+  max-width: 240px;
 }
 
 .series-list,
@@ -253,6 +264,52 @@ button {
   margin-top: 12px;
 }
 
+.command-surface {
+  margin: 14px 0;
+  border: 1px solid #fdba74;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.96), rgba(255, 255, 255, 0.92));
+  padding: 14px;
+}
+
+.command-surface-compose {
+  margin-top: 18px;
+}
+
+.command-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #9a3412;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.command-input {
+  width: 100%;
+  border: 1px solid #fdba74;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #1c1917;
+  padding: 11px 12px;
+}
+
+.command-input:focus-visible {
+  outline: 2px solid rgba(245, 158, 11, 0.35);
+  outline-offset: 2px;
+}
+
+.command-input:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.command-help,
+.command-status {
+  margin: 8px 0 0;
+  color: #78716c;
+  font-size: 0.9rem;
+}
+
 .empty-state {
   display: flex;
   min-height: 220px;
@@ -324,6 +381,10 @@ button {
   color: #9a3412;
 }
 
+.interaction-feedback {
+  margin-top: 12px;
+}
+
 .config-warning-banner p,
 .config-ok,
 .selection-footer {
@@ -387,6 +448,10 @@ button {
   .panel-hint {
     max-width: none;
     text-align: left;
+  }
+
+  .timeline-heading-actions {
+    align-items: stretch;
   }
 
   .series-open-button,

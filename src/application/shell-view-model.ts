@@ -1,6 +1,7 @@
 import type { AdapterSnapshot } from "../adapter/runtime-adapter";
 import type {
   CommitItem,
+  PendingShellAction,
   RpcEnvelope,
   RpcError,
   SeriesListData,
@@ -13,10 +14,15 @@ export type ShellAction =
       type: "series.list.replaced";
       seriesList: SeriesSummary[];
       navigationError: RpcError | null;
+      preferredSeriesId?: string | null;
     }
   | {
       type: "series.selected";
       seriesId: string;
+    }
+  | {
+      type: "series.selection.moved";
+      direction: "up" | "down";
     }
   | {
       type: "timeline.requested";
@@ -34,6 +40,42 @@ export type ShellAction =
     }
   | {
       type: "timeline.closed";
+    }
+  | {
+      type: "interaction.search.opened";
+    }
+  | {
+      type: "interaction.search.changed";
+      query: string;
+    }
+  | {
+      type: "interaction.create_series.opened";
+    }
+  | {
+      type: "interaction.create_series.changed";
+      value: string;
+    }
+  | {
+      type: "interaction.draft_commit.opened";
+      initialContent?: string;
+    }
+  | {
+      type: "interaction.draft_commit.changed";
+      value: string;
+    }
+  | {
+      type: "interaction.cancelled";
+    }
+  | {
+      type: "interaction.feedback.set";
+      feedback: RpcError;
+    }
+  | {
+      type: "interaction.feedback.cleared";
+    }
+  | {
+      type: "interaction.pending.set";
+      pendingAction: PendingShellAction | null;
     };
 
 export function buildInitialShellState(
@@ -44,7 +86,7 @@ export function buildInitialShellState(
 
   return {
     appTitle: "Remember",
-    subtitle: "Phase 4 Task 2 - List & Timeline Navigation",
+    subtitle: "Phase 4 Task 3 - Keyboard-First Interaction",
     layers: {
       adapter: snapshot.adapter,
       application: "ready",
@@ -59,13 +101,22 @@ export function buildInitialShellState(
     timelineLoadState: "idle",
     timelineItems: [],
     navigationError: seriesEnvelope.ok ? null : ensureRpcError(seriesEnvelope.error, "series list"),
+    interactionMode: "browse",
+    searchQuery: "",
+    newSeriesNameDraft: "",
+    commitDraft: "",
+    pendingAction: null,
+    interactionFeedback: null,
   };
 }
 
 export function shellReducer(state: ShellState, action: ShellAction): ShellState {
   switch (action.type) {
     case "series.list.replaced": {
-      const nextSelectedSeriesId = pickSelectedSeriesId(action.seriesList, state.selectedSeriesId);
+      const nextSelectedSeriesId = pickSelectedSeriesId(
+        action.seriesList,
+        action.preferredSeriesId ?? state.selectedSeriesId,
+      );
       const activeTimelineSeries = state.activeTimelineSeries
         ? findSeriesById(action.seriesList, state.activeTimelineSeries.id)
         : null;
@@ -80,6 +131,8 @@ export function shellReducer(state: ShellState, action: ShellAction): ShellState
           timelineLoadState: "idle",
           timelineItems: [],
           navigationError: action.navigationError,
+          interactionMode: "browse",
+          interactionFeedback: null,
         };
       }
 
@@ -99,8 +152,19 @@ export function shellReducer(state: ShellState, action: ShellAction): ShellState
       return {
         ...state,
         selectedSeriesId: action.seriesId,
+        interactionFeedback: null,
       };
     }
+    case "series.selection.moved":
+      return {
+        ...state,
+        selectedSeriesId: moveSelectedSeriesId(
+          state.seriesList,
+          state.selectedSeriesId,
+          action.direction,
+        ),
+        interactionFeedback: null,
+      };
     case "timeline.requested": {
       const series = findSeriesById(state.seriesList, action.seriesId);
       if (series === null) {
@@ -115,6 +179,11 @@ export function shellReducer(state: ShellState, action: ShellAction): ShellState
         timelineLoadState: "loading",
         timelineItems: [],
         navigationError: null,
+        interactionMode: "browse",
+        searchQuery: "",
+        newSeriesNameDraft: "",
+        commitDraft: "",
+        interactionFeedback: null,
       };
     }
     case "timeline.loaded": {
@@ -151,6 +220,83 @@ export function shellReducer(state: ShellState, action: ShellAction): ShellState
         timelineLoadState: "idle",
         timelineItems: [],
         navigationError: null,
+        interactionMode: "browse",
+        searchQuery: "",
+        newSeriesNameDraft: "",
+        commitDraft: "",
+        interactionFeedback: null,
+      };
+    case "interaction.search.opened":
+      return {
+        ...state,
+        interactionMode: "search",
+        searchQuery: "",
+        newSeriesNameDraft: "",
+        commitDraft: "",
+        interactionFeedback: null,
+      };
+    case "interaction.search.changed":
+      return {
+        ...state,
+        interactionMode: "search",
+        searchQuery: action.query,
+        interactionFeedback: null,
+      };
+    case "interaction.create_series.opened":
+      return {
+        ...state,
+        interactionMode: "create_series",
+        searchQuery: "",
+        newSeriesNameDraft: "",
+        commitDraft: "",
+        interactionFeedback: null,
+      };
+    case "interaction.create_series.changed":
+      return {
+        ...state,
+        interactionMode: "create_series",
+        newSeriesNameDraft: action.value,
+        interactionFeedback: null,
+      };
+    case "interaction.draft_commit.opened":
+      return {
+        ...state,
+        interactionMode: "draft_commit",
+        searchQuery: "",
+        newSeriesNameDraft: "",
+        commitDraft: action.initialContent ?? "",
+        interactionFeedback: null,
+      };
+    case "interaction.draft_commit.changed":
+      return {
+        ...state,
+        interactionMode: "draft_commit",
+        commitDraft: action.value,
+        interactionFeedback: null,
+      };
+    case "interaction.cancelled":
+      return {
+        ...state,
+        interactionMode: "browse",
+        searchQuery: "",
+        newSeriesNameDraft: "",
+        commitDraft: "",
+        interactionFeedback: null,
+      };
+    case "interaction.feedback.set":
+      return {
+        ...state,
+        interactionFeedback: action.feedback,
+      };
+    case "interaction.feedback.cleared":
+      return {
+        ...state,
+        interactionFeedback: null,
+      };
+    case "interaction.pending.set":
+      return {
+        ...state,
+        pendingAction: action.pendingAction,
       };
     default:
       return state;
@@ -174,6 +320,30 @@ function pickSelectedSeriesId(
   }
 
   return seriesList[0]?.id ?? null;
+}
+
+function moveSelectedSeriesId(
+  seriesList: SeriesSummary[],
+  selectedSeriesId: string | null,
+  direction: "up" | "down",
+): string | null {
+  if (seriesList.length === 0) {
+    return null;
+  }
+
+  const currentIndex =
+    selectedSeriesId === null ? -1 : seriesList.findIndex((item) => item.id === selectedSeriesId);
+
+  if (currentIndex === -1) {
+    return seriesList[0]?.id ?? null;
+  }
+
+  const nextIndex =
+    direction === "up"
+      ? Math.max(0, currentIndex - 1)
+      : Math.min(seriesList.length - 1, currentIndex + 1);
+
+  return seriesList[nextIndex]?.id ?? null;
 }
 
 function ensureRpcError(error: RpcError | undefined, target: string): RpcError {

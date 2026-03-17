@@ -97,6 +97,8 @@ describe("shell view model", () => {
     expect(state.view).toBe("series_list");
     expect(state.selectedSeriesId).toBe("series-inbox");
     expect(state.timelineLoadState).toBe("idle");
+    expect(state.interactionMode).toBe("browse");
+    expect(state.pendingAction).toBeNull();
   });
 
   it("keeps an empty selection when the list is empty", () => {
@@ -143,6 +145,26 @@ describe("shell view model", () => {
     expect(loaded.timelineLoadState).toBe("ready");
     expect(closed.view).toBe("series_list");
     expect(closed.selectedSeriesId).toBe("series-project-a");
+  });
+
+  it("moves selection through the list and clamps at the boundaries", () => {
+    const initial = buildInitialShellState(buildSnapshot(), buildSeriesEnvelope());
+    const movedDown = shellReducer(initial, {
+      type: "series.selection.moved",
+      direction: "down",
+    });
+    const movedPastEnd = shellReducer(movedDown, {
+      type: "series.selection.moved",
+      direction: "down",
+    });
+    const movedUp = shellReducer(movedPastEnd, {
+      type: "series.selection.moved",
+      direction: "up",
+    });
+
+    expect(movedDown.selectedSeriesId).toBe("series-project-a");
+    expect(movedPastEnd.selectedSeriesId).toBe("series-project-a");
+    expect(movedUp.selectedSeriesId).toBe("series-inbox");
   });
 
   it("clears error state when retrying timeline load", () => {
@@ -192,5 +214,52 @@ describe("shell view model", () => {
     });
 
     expect(replaced.selectedSeriesId).toBe("series-inbox");
+  });
+
+  it("opens and cancels input modes while clearing drafts", () => {
+    const initial = buildInitialShellState(buildSnapshot(), buildSeriesEnvelope());
+    const search = shellReducer(initial, {
+      type: "interaction.search.opened",
+    });
+    const searchChanged = shellReducer(search, {
+      type: "interaction.search.changed",
+      query: "Inbox",
+    });
+    const create = shellReducer(searchChanged, {
+      type: "interaction.create_series.opened",
+    });
+    const createChanged = shellReducer(create, {
+      type: "interaction.create_series.changed",
+      value: "New Series",
+    });
+    const draft = shellReducer(createChanged, {
+      type: "interaction.draft_commit.opened",
+      initialContent: "f",
+    });
+    const cancelled = shellReducer(draft, {
+      type: "interaction.cancelled",
+    });
+
+    expect(search.interactionMode).toBe("search");
+    expect(searchChanged.searchQuery).toBe("Inbox");
+    expect(create.interactionMode).toBe("create_series");
+    expect(createChanged.newSeriesNameDraft).toBe("New Series");
+    expect(draft.commitDraft).toBe("f");
+    expect(cancelled.interactionMode).toBe("browse");
+    expect(cancelled.searchQuery).toBe("");
+    expect(cancelled.newSeriesNameDraft).toBe("");
+    expect(cancelled.commitDraft).toBe("");
+  });
+
+  it("uses a preferred series id when refreshing the list", () => {
+    const initial = buildInitialShellState(buildSnapshot(), buildSeriesEnvelope());
+    const replaced = shellReducer(initial, {
+      type: "series.list.replaced",
+      seriesList: buildSeriesEnvelope().data?.items ?? [],
+      navigationError: null,
+      preferredSeriesId: "series-project-a",
+    });
+
+    expect(replaced.selectedSeriesId).toBe("series-project-a");
   });
 });

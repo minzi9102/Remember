@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  readMockAppendCommit,
+  readMockArchiveSeries,
   buildDefaultSeriesListRequest,
   buildDefaultTimelineRequest,
   parseMockRuntimeStatus,
   parseNativeRuntimeStatusFromTitle,
   readMockCommandProbe,
+  readMockCreateSeries,
   readMockSeriesList,
   readMockTimeline,
 } from "../src/adapter/runtime-adapter";
@@ -197,6 +200,24 @@ describe("runtime-adapter command envelope probe", () => {
 });
 
 describe("runtime-adapter typed helpers", () => {
+  it("returns create series data in mock mode", () => {
+    const envelope = readMockCreateSeries("?runtime_mode=sqlite_only", "Inbox");
+
+    expect(envelope.ok).toBe(true);
+    expect(envelope.data?.series).toMatchObject({
+      id: "stub-series-inbox",
+      name: "Inbox",
+      status: "active",
+    });
+  });
+
+  it("returns validation error for create series when mock fail flag is enabled", () => {
+    const envelope = readMockCreateSeries("?runtime_mode=sqlite_only&rpc_fail=1", "Inbox");
+
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error?.code).toBe("VALIDATION_ERROR");
+  });
+
   it("returns series list data in mock mode", () => {
     const envelope = readMockSeriesList("?runtime_mode=sqlite_only", buildDefaultSeriesListRequest());
 
@@ -213,6 +234,48 @@ describe("runtime-adapter typed helpers", () => {
 
     expect(envelope.ok).toBe(false);
     expect(envelope.error?.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns commit append data in mock mode", () => {
+    const envelope = readMockAppendCommit(
+      "?runtime_mode=sqlite_only",
+      "series-inbox",
+      "follow-up-note",
+      "2026-03-16T00:00:00Z",
+    );
+
+    expect(envelope.ok).toBe(true);
+    expect(envelope.data).toMatchObject({
+      commit: {
+        id: "stub-commit-001",
+        seriesId: "series-inbox",
+        content: "follow-up-note",
+      },
+      series: {
+        id: "series-inbox",
+        status: "active",
+      },
+    });
+  });
+
+  it("returns archive data in mock mode", () => {
+    const envelope = readMockArchiveSeries("?runtime_mode=sqlite_only", "series-project-a");
+
+    expect(envelope.ok).toBe(true);
+    expect(envelope.data).toMatchObject({
+      seriesId: "series-project-a",
+      archivedAt: "2026-03-16T00:00:00Z",
+    });
+  });
+
+  it("returns forced error for archive helper", () => {
+    const envelope = readMockArchiveSeries(
+      "?runtime_mode=dual_sync&rpc_error=dual_write_failed",
+      "series-project-a",
+    );
+
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error?.code).toBe("DUAL_WRITE_FAILED");
   });
 
   it("returns forced error for timeline helper", () => {
