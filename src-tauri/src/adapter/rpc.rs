@@ -8,6 +8,7 @@ use crate::application::{
     config::RuntimeConfigState,
     service::{ApplicationError, ApplicationService, ApplicationServiceState},
 };
+use crate::repository::StartupSelfHealSummary;
 
 const VALIDATION_ERROR_CODE: &str = "VALIDATION_ERROR";
 const UNKNOWN_COMMAND_CODE: &str = "UNKNOWN_COMMAND";
@@ -44,6 +45,7 @@ pub struct RpcMeta {
     pub runtime_mode: String,
     pub used_fallback: bool,
     pub responded_at_unix_ms: u128,
+    pub startup_self_heal: StartupSelfHealSummary,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -69,7 +71,7 @@ pub(crate) fn rpc_invoke(
         &path,
         payload.unwrap_or(Value::Null),
         config_state.inner(),
-        service_state.service(),
+        service_state.inner(),
     ))
 }
 
@@ -77,7 +79,7 @@ pub(crate) async fn handle_rpc(
     path: &str,
     payload: Value,
     config_state: &RuntimeConfigState,
-    service: &ApplicationService,
+    service_state: &ApplicationServiceState,
 ) -> RpcEnvelope {
     tracing::debug!(
         component = "rpc",
@@ -98,14 +100,14 @@ pub(crate) async fn handle_rpc(
             );
             Err(error)
         }
-        Ok(None) => dispatch(path, &payload, service).await,
+        Ok(None) => dispatch(path, &payload, service_state.service()).await,
         Err(error) => Err(error),
     };
 
     match dispatch_result {
         Ok(data) => {
             tracing::info!(component = "rpc", path, "rpc invoke succeeded");
-            RpcEnvelope::success(path, config_state, data)
+            RpcEnvelope::success(path, config_state, service_state, data)
         }
         Err(error) => {
             tracing::warn!(
@@ -115,27 +117,37 @@ pub(crate) async fn handle_rpc(
                 message = %error.message,
                 "rpc invoke failed"
             );
-            RpcEnvelope::failure(path, config_state, error)
+            RpcEnvelope::failure(path, config_state, service_state, error)
         }
     }
 }
 
 impl RpcEnvelope {
-    fn success(path: &str, config_state: &RuntimeConfigState, data: Value) -> Self {
+    fn success(
+        path: &str,
+        config_state: &RuntimeConfigState,
+        service_state: &ApplicationServiceState,
+        data: Value,
+    ) -> Self {
         Self {
             ok: true,
             data: Some(data),
             error: None,
-            meta: build_meta(path, config_state),
+            meta: build_meta(path, config_state, service_state),
         }
     }
 
-    fn failure(path: &str, config_state: &RuntimeConfigState, error: RpcError) -> Self {
+    fn failure(
+        path: &str,
+        config_state: &RuntimeConfigState,
+        service_state: &ApplicationServiceState,
+        error: RpcError,
+    ) -> Self {
         Self {
             ok: false,
             data: None,
             error: Some(error),
-            meta: build_meta(path, config_state),
+            meta: build_meta(path, config_state, service_state),
         }
     }
 }
@@ -199,7 +211,11 @@ impl RpcError {
     }
 }
 
-fn build_meta(path: &str, config_state: &RuntimeConfigState) -> RpcMeta {
+fn build_meta(
+    path: &str,
+    config_state: &RuntimeConfigState,
+    service_state: &ApplicationServiceState,
+) -> RpcMeta {
     RpcMeta {
         path: path.to_string(),
         runtime_mode: config_state
@@ -209,6 +225,7 @@ fn build_meta(path: &str, config_state: &RuntimeConfigState) -> RpcMeta {
             .to_string(),
         used_fallback: config_state.used_fallback,
         responded_at_unix_ms: current_unix_ms(),
+        startup_self_heal: service_state.startup_self_heal().clone(),
     }
 }
 
@@ -430,7 +447,7 @@ mod tests {
             "series.create",
             serde_json::json!({ "name": "Inbox" }),
             &state,
-            service_state.service(),
+            &service_state,
         )
         .await;
 
@@ -438,6 +455,7 @@ mod tests {
         assert!(envelope.error.is_none());
         assert_eq!(envelope.meta.path, "series.create");
         assert_eq!(envelope.meta.runtime_mode, "sqlite_only");
+        assert_eq!(envelope.meta.startup_self_heal.scanned_alerts, 0);
         let data = envelope
             .data
             .as_ref()
@@ -464,7 +482,7 @@ mod tests {
             "series.create",
             serde_json::json!({ "name": "Inbox" }),
             &state,
-            service_state.service(),
+            &service_state,
         )
         .await;
         let series_id = created
@@ -484,7 +502,7 @@ mod tests {
                 "clientTs": "2026-03-16T10:00:00+08:00"
             }),
             &state,
-            service_state.service(),
+            &service_state,
         )
         .await;
 
@@ -518,7 +536,7 @@ mod tests {
             "series.create",
             serde_json::json!({ "name": "Inbox" }),
             &state,
-            service_state.service(),
+            &service_state,
         )
         .await;
         let series_id = created
@@ -537,7 +555,7 @@ mod tests {
                 "clientTs": "2026-03-16T00:00:00Z"
             }),
             &state,
-            service_state.service(),
+            &service_state,
         )
         .await;
 
@@ -549,7 +567,7 @@ mod tests {
                 "limit": 20
             }),
             &state,
-            service_state.service(),
+            &service_state,
         )
         .await;
 
@@ -586,7 +604,7 @@ mod tests {
                 "limit": 0
             }),
             &state,
-            service_state.service(),
+            &service_state,
         )
         .await;
 
@@ -607,7 +625,7 @@ mod tests {
                 "limit": 20
             }),
             &state,
-            service_state.service(),
+            &service_state,
         )
         .await;
 
@@ -624,7 +642,7 @@ mod tests {
             "series.unknown",
             serde_json::json!({}),
             &state,
-            service_state.service(),
+            &service_state,
         )
         .await;
 
@@ -641,7 +659,7 @@ mod tests {
             "series.create",
             serde_json::json!({ "name": "Inbox", "__forceErrorCode": "PG_TIMEOUT" }),
             &state,
-            service_state.service(),
+            &service_state,
         )
         .await;
 
@@ -658,7 +676,7 @@ mod tests {
             "series.create",
             serde_json::json!({ "name": "Inbox", "__forceErrorCode": "DUAL_WRITE_FAILED" }),
             &state,
-            service_state.service(),
+            &service_state,
         )
         .await;
 
@@ -675,12 +693,13 @@ mod tests {
             "series.create",
             serde_json::json!({ "name": "Inbox" }),
             &state,
-            service_state.service(),
+            &service_state,
         )
         .await;
 
         assert!(envelope.ok, "dual_sync mode should execute command");
         assert_eq!(envelope.meta.runtime_mode, "dual_sync");
+        assert_eq!(envelope.meta.startup_self_heal.repaired_alerts, 0);
         assert!(envelope.error.is_none());
     }
 

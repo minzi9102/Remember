@@ -10,6 +10,7 @@ import type {
   SeriesCreateData,
   SeriesListData,
   SeriesScanSilentData,
+  StartupSelfHealSummary,
   TimelineListData,
 } from "../application/types";
 
@@ -123,7 +124,12 @@ export function readMockCommandProbe(search: string): CommandProbe {
   return {
     source: "mock",
     path: request.path,
-    envelope: mockInvoke(request.path, request.payload, runtimeStatus),
+    envelope: mockInvoke(
+      request.path,
+      request.payload,
+      runtimeStatus,
+      request.startupSelfHeal,
+    ),
   };
 }
 
@@ -147,6 +153,68 @@ function collectWarningsFromParams(params: URLSearchParams): string[] {
   }
 
   return warnings;
+}
+
+function buildStartupSelfHealSummary(params: URLSearchParams): StartupSelfHealSummary {
+  const completedAt =
+    params.get("startup_self_heal_completed_at")?.trim() || new Date().toISOString();
+
+  return {
+    scannedAlerts: readNonNegativeIntegerParam(params, "startup_self_heal_scanned") ?? 0,
+    repairedAlerts: readNonNegativeIntegerParam(params, "startup_self_heal_repaired") ?? 0,
+    unresolvedAlerts: readNonNegativeIntegerParam(params, "startup_self_heal_unresolved") ?? 0,
+    failedAlerts: readNonNegativeIntegerParam(params, "startup_self_heal_failed") ?? 0,
+    completedAt,
+    messages: collectDelimitedParams(
+      params,
+      "startup_self_heal_message",
+      "startup_self_heal_messages",
+    ),
+  };
+}
+
+function collectDelimitedParams(
+  params: URLSearchParams,
+  repeatedKey: string,
+  csvKey: string,
+): string[] {
+  const values: string[] = [];
+
+  for (const raw of params.getAll(repeatedKey)) {
+    const trimmed = raw.trim();
+    if (trimmed.length > 0) {
+      values.push(trimmed);
+    }
+  }
+
+  const csv = params.get(csvKey);
+  if (csv) {
+    values.push(
+      ...csv
+        .split(/[;,]/)
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0),
+    );
+  }
+
+  return [...new Set(values)];
+}
+
+function readNonNegativeIntegerParam(
+  params: URLSearchParams,
+  key: string,
+): number | undefined {
+  const raw = params.get(key);
+  if (raw === null || raw.trim().length === 0) {
+    return undefined;
+  }
+
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0) {
+    return undefined;
+  }
+
+  return value;
 }
 
 function normalizeRuntimeMode(
@@ -183,7 +251,12 @@ async function readCommandProbe(runtimeStatus: RuntimeStatus): Promise<CommandPr
     return {
       source: "mock",
       path: request.path,
-      envelope: mockInvoke(request.path, request.payload, runtimeStatus),
+      envelope: mockInvoke(
+        request.path,
+        request.payload,
+        runtimeStatus,
+        request.startupSelfHeal,
+      ),
     };
   }
 
@@ -206,6 +279,7 @@ async function readCommandProbe(runtimeStatus: RuntimeStatus): Promise<CommandPr
       envelope: buildErrorEnvelope(
         request.path,
         runtimeStatus,
+        request.startupSelfHeal,
         INVOKE_FAILED,
         `failed to invoke native rpc shell: ${String(error)}`,
       ),
@@ -213,7 +287,11 @@ async function readCommandProbe(runtimeStatus: RuntimeStatus): Promise<CommandPr
   }
 }
 
-function buildProbeRequest(search: string): { path: string; payload: Record<string, unknown> } {
+function buildProbeRequest(search: string): {
+  path: string;
+  payload: Record<string, unknown>;
+  startupSelfHeal: StartupSelfHealSummary;
+} {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const path = normalizeProbePath(params.get("rpc_path"));
   const forceFail = isTruthy(params.get("rpc_fail"));
@@ -230,6 +308,7 @@ function buildProbeRequest(search: string): { path: string; payload: Record<stri
   return {
     path,
     payload,
+    startupSelfHeal: buildStartupSelfHealSummary(params),
   };
 }
 
@@ -315,12 +394,14 @@ function mockInvoke(
   path: string,
   payload: Record<string, unknown>,
   runtimeStatus: RuntimeStatus,
+  startupSelfHeal: StartupSelfHealSummary,
 ): RpcEnvelope<RpcData> {
   const meta = {
     path,
     runtimeMode: runtimeStatus.mode,
     usedFallback: runtimeStatus.usedFallback,
     respondedAtUnixMs: Date.now(),
+    startupSelfHeal,
   };
 
   try {
@@ -609,6 +690,7 @@ function readOptionalPositiveInteger(
 function buildErrorEnvelope(
   path: string,
   runtimeStatus: RuntimeStatus,
+  startupSelfHeal: StartupSelfHealSummary,
   code: string,
   message: string,
 ): RpcEnvelope {
@@ -623,6 +705,7 @@ function buildErrorEnvelope(
       runtimeMode: runtimeStatus.mode,
       usedFallback: runtimeStatus.usedFallback,
       respondedAtUnixMs: Date.now(),
+      startupSelfHeal,
     },
   };
 }

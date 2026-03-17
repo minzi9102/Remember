@@ -65,6 +65,13 @@ describe("runtime-adapter command envelope probe", () => {
     expect(probe.envelope.ok).toBe(true);
     expect(probe.envelope.meta.runtimeMode).toBe("dual_sync");
     expect(probe.envelope.meta.path).toBe("series.create");
+    expect(probe.envelope.meta.startupSelfHeal).toMatchObject({
+      scannedAlerts: 0,
+      repairedAlerts: 0,
+      unresolvedAlerts: 0,
+      failedAlerts: 0,
+      messages: [],
+    });
     expect(probe.envelope.data).toMatchObject({
       series: {
         id: "stub-series-inbox",
@@ -156,5 +163,19 @@ describe("runtime-adapter command envelope probe", () => {
 
     expect(probe.envelope.ok).toBe(false);
     expect(probe.envelope.error?.code).toBe("UNKNOWN_COMMAND");
+  });
+
+  it("parses startup self-heal summary from query parameters", () => {
+    const probe = readMockCommandProbe(
+      "?runtime_mode=dual_sync&startup_self_heal_scanned=4&startup_self_heal_repaired=3&startup_self_heal_unresolved=1&startup_self_heal_failed=1&startup_self_heal_message=alert-a&startup_self_heal_messages=alert-b;alert-c",
+    );
+
+    expect(probe.envelope.meta.startupSelfHeal).toMatchObject({
+      scannedAlerts: 4,
+      repairedAlerts: 3,
+      unresolvedAlerts: 1,
+      failedAlerts: 1,
+      messages: ["alert-a", "alert-b", "alert-c"],
+    });
   });
 });

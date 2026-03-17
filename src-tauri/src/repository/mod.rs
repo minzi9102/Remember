@@ -12,7 +12,7 @@ use crate::application::config::RuntimeMode;
 use async_trait::async_trait;
 
 #[allow(unused_imports)]
-pub use dual_sync::DualSyncRepository;
+pub use dual_sync::{DualSyncRepository, StartupSelfHealSummary};
 #[allow(unused_imports)]
 pub use postgres::PostgresRepository;
 #[allow(unused_imports)]

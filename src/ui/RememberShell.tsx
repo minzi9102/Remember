@@ -16,6 +16,8 @@ export function RememberShellLoading() {
 }
 
 export function RememberShell({ shell }: RememberShellProps) {
+  const startupSelfHeal = shell.commandProbe.envelope.meta.startupSelfHeal;
+
   return (
     <main className="remember-shell" data-testid="remember-shell">
       <header className="shell-header">
@@ -93,6 +95,42 @@ export function RememberShell({ shell }: RememberShellProps) {
         <pre className="command-meta" data-testid="command-envelope-data">
           {JSON.stringify(shell.commandProbe.envelope.data ?? null, null, 2)}
         </pre>
+      </section>
+
+      <section className="startup-self-heal panel" data-testid="startup-self-heal-panel">
+        <h2>Startup Self-Heal</h2>
+        <div className="runtime-tags">
+          <span className="runtime-tag mode" data-testid="startup-self-heal-scanned">
+            scanned: {startupSelfHeal.scannedAlerts}
+          </span>
+          <span className="runtime-tag source" data-testid="startup-self-heal-repaired">
+            repaired: {startupSelfHeal.repairedAlerts}
+          </span>
+          <span className="runtime-tag fallback" data-testid="startup-self-heal-unresolved">
+            unresolved: {startupSelfHeal.unresolvedAlerts}
+          </span>
+          <span className="runtime-tag fallback" data-testid="startup-self-heal-failed">
+            failed: {startupSelfHeal.failedAlerts}
+          </span>
+        </div>
+        <p data-testid="startup-self-heal-completed-at">
+          completed at: {startupSelfHeal.completedAt}
+        </p>
+
+        {startupSelfHeal.unresolvedAlerts > 0 && startupSelfHeal.messages.length > 0 ? (
+          <div className="config-warning-banner" data-testid="startup-self-heal-messages">
+            <strong>Unresolved startup alerts</strong>
+            <ul>
+              {startupSelfHeal.messages.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="config-ok" data-testid="startup-self-heal-clean">
+            No unresolved startup alerts.
+          </p>
+        )}
       </section>
 
       <section className="shell-grid">

@@ -1,15 +1,19 @@
 #![allow(dead_code)]
 
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
 use chrono::{SecondsFormat, Utc};
+use serde::Serialize;
 use sqlx::{postgres::PgPool, sqlite::SqlitePool};
 use uuid::Uuid;
 
 use super::{
-    map_sqlx_error, AppendCommitInput, AppendCommitResult, ArchiveSeriesInput, ArchiveSeriesResult,
-    CreateSeriesInput, ListSeriesQuery, MarkSilentSeriesInput, MarkSilentSeriesResult,
-    MemoRepository, PagedResult, PostgresRepository, RepositoryError, SearchSeriesQuery,
-    SeriesRecord, SqliteRepository, TimelineQuery,
+    map_sqlx_error, maybe_inject_test_failure, AppendCommitInput, AppendCommitResult,
+    ArchiveSeriesInput, ArchiveSeriesResult, CreateSeriesInput, ListSeriesQuery,
+    MarkSilentSeriesInput, MarkSilentSeriesResult, MemoRepository, PagedResult,
+    PostgresRepository, RepositoryError, SearchSeriesQuery, SeriesRecord, SqliteRepository,
+    TimelineQuery,
 };
 
 const POSTGRES_SNAPSHOT_TIMEOUT_SQL: &str = "SET LOCAL statement_timeout = '3s'";
@@ -20,12 +24,95 @@ pub struct DualSyncRepository {
     postgres: PostgresRepository,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct SeriesSnapshot {
     status: String,
     latest_excerpt: String,
     last_updated_at: String,
     archived_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupSelfHealSummary {
+    pub scanned_alerts: u64,
+    pub repaired_alerts: u64,
+    pub unresolved_alerts: u64,
+    pub failed_alerts: u64,
+    pub completed_at: String,
+    pub messages: Vec<String>,
+}
+
+impl StartupSelfHealSummary {
+    pub fn clean() -> Self {
+        Self {
+            scanned_alerts: 0,
+            repaired_alerts: 0,
+            unresolved_alerts: 0,
+            failed_alerts: 0,
+            completed_at: now_utc_rfc3339_seconds(),
+            messages: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ConsistencyAlertRecord {
+    id: String,
+    op_type: String,
+    commit_id: String,
+    reason: String,
+    created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedConsistencyAlert {
+    id: String,
+    op_type: StartupSelfHealOperation,
+    commit_id: String,
+    succeeded_side: BackendSide,
+    failed_side: BackendSide,
+    detail: StartupSelfHealDetail,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StartupSelfHealOperation {
+    CreateSeries,
+    AppendCommit,
+    ArchiveSeries,
+    MarkSilentSeries,
+}
+
+impl StartupSelfHealOperation {
+    fn from_op_type(value: &str) -> Option<Self> {
+        match value {
+            "create_series" => Some(Self::CreateSeries),
+            "append_commit" => Some(Self::AppendCommit),
+            "archive_series" => Some(Self::ArchiveSeries),
+            "mark_silent_series" => Some(Self::MarkSilentSeries),
+            _ => None,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::CreateSeries => "create_series",
+            Self::AppendCommit => "append_commit",
+            Self::ArchiveSeries => "archive_series",
+            Self::MarkSilentSeries => "mark_silent_series",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum StartupSelfHealDetail {
+    CreateSeries { series_id: String },
+    AppendCommit { series_id: String },
+    ArchiveSeries { series_id: String },
+    MarkSilentSeries {
+        threshold_before: String,
+        affected_series_ids: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,6 +128,14 @@ impl BackendSide {
             Self::Postgres => "postgres",
         }
     }
+
+    fn from_str(value: &str) -> Option<Self> {
+        match value {
+            "sqlite" => Some(Self::Sqlite),
+            "postgres" => Some(Self::Postgres),
+            _ => None,
+        }
+    }
 }
 
 impl DualSyncRepository {
@@ -51,10 +146,94 @@ impl DualSyncRepository {
         }
     }
 
+    pub async fn run_startup_self_heal(&self) -> StartupSelfHealSummary {
+        let alerts = match self.load_unresolved_consistency_alerts().await {
+            Ok(alerts) => alerts,
+            Err(error) => {
+                return StartupSelfHealSummary {
+                    scanned_alerts: 0,
+                    repaired_alerts: 0,
+                    unresolved_alerts: 1,
+                    failed_alerts: 1,
+                    completed_at: now_utc_rfc3339_seconds(),
+                    messages: vec![format!(
+                        "failed to load unresolved consistency alerts: {error}"
+                    )],
+                };
+            }
+        };
+
+        let mut summary = StartupSelfHealSummary {
+            scanned_alerts: alerts.len() as u64,
+            repaired_alerts: 0,
+            unresolved_alerts: 0,
+            failed_alerts: 0,
+            completed_at: String::new(),
+            messages: Vec::new(),
+        };
+
+        for alert in alerts {
+            let parsed = match parse_consistency_alert(&alert) {
+                Ok(parsed) => parsed,
+                Err(error) => {
+                    summary.failed_alerts += 1;
+                    summary.messages.push(format!(
+                        "alert `{}` ({}) could not be parsed: {error}",
+                        alert.id, alert.op_type
+                    ));
+                    continue;
+                }
+            };
+
+            match self.apply_startup_self_heal(&parsed).await {
+                Ok(()) => {
+                    if let Err(error) = self
+                        .resolve_consistency_alert_for_startup(&parsed.id, parsed.op_type.as_str())
+                        .await
+                    {
+                        summary.failed_alerts += 1;
+                        summary.messages.push(format!(
+                            "alert `{}` ({}) repaired but could not be resolved: {error}",
+                            parsed.id,
+                            parsed.op_type.as_str()
+                        ));
+                    } else {
+                        summary.repaired_alerts += 1;
+                    }
+                }
+                Err(error) => {
+                    summary.failed_alerts += 1;
+                    summary.messages.push(format!(
+                        "alert `{}` ({}) remains unresolved: {error}",
+                        parsed.id,
+                        parsed.op_type.as_str()
+                    ));
+                }
+            }
+        }
+
+        summary.unresolved_alerts = summary.failed_alerts;
+        summary.completed_at = now_utc_rfc3339_seconds();
+        summary
+    }
+
     async fn load_sqlite_series_snapshot(
         &self,
         series_id: &str,
     ) -> Result<SeriesSnapshot, RepositoryError> {
+        let Some(snapshot) = self.load_sqlite_series_snapshot_optional(series_id).await? else {
+            return Err(RepositoryError::not_found(format!(
+                "series `{series_id}` does not exist in sqlite"
+            )));
+        };
+
+        Ok(snapshot)
+    }
+
+    async fn load_sqlite_series_snapshot_optional(
+        &self,
+        series_id: &str,
+    ) -> Result<Option<SeriesSnapshot>, RepositoryError> {
         let row: Option<(String, String, String, Option<String>)> = sqlx::query_as(
             "SELECT status, latest_excerpt, last_updated_at, archived_at
              FROM series
@@ -65,24 +244,31 @@ impl DualSyncRepository {
         .await
         .map_err(map_sqlx_error)?;
 
-        let Some((status, latest_excerpt, last_updated_at, archived_at)) = row else {
-            return Err(RepositoryError::not_found(format!(
-                "series `{series_id}` does not exist in sqlite"
-            )));
-        };
-
-        Ok(SeriesSnapshot {
+        Ok(row.map(|(status, latest_excerpt, last_updated_at, archived_at)| SeriesSnapshot {
             status,
             latest_excerpt,
             last_updated_at,
             archived_at,
-        })
+        }))
     }
 
     async fn load_postgres_series_snapshot(
         &self,
         series_id: &str,
     ) -> Result<SeriesSnapshot, RepositoryError> {
+        let Some(snapshot) = self.load_postgres_series_snapshot_optional(series_id).await? else {
+            return Err(RepositoryError::not_found(format!(
+                "series `{series_id}` does not exist in postgres"
+            )));
+        };
+
+        Ok(snapshot)
+    }
+
+    async fn load_postgres_series_snapshot_optional(
+        &self,
+        series_id: &str,
+    ) -> Result<Option<SeriesSnapshot>, RepositoryError> {
         let mut tx = self.postgres.pool().begin().await.map_err(map_sqlx_error)?;
         sqlx::query(POSTGRES_SNAPSHOT_TIMEOUT_SQL)
             .execute(&mut *tx)
@@ -106,21 +292,16 @@ impl DualSyncRepository {
         .await
         .map_err(map_sqlx_error)?;
 
-        let Some((status, latest_excerpt, last_updated_at, archived_at)) = row else {
-            return Err(RepositoryError::not_found(format!(
-                "series `{series_id}` does not exist in postgres"
-            )));
-        };
-
-        Ok(SeriesSnapshot {
+        Ok(row.map(|(status, latest_excerpt, last_updated_at, archived_at)| SeriesSnapshot {
             status,
             latest_excerpt,
             last_updated_at,
             archived_at,
-        })
+        }))
     }
 
     async fn rollback_sqlite_create_series(&self, series_id: &str) -> Result<(), RepositoryError> {
+        maybe_inject_test_failure("sqlite", "rollback_create_series", series_id)?;
         sqlx::query("DELETE FROM series WHERE id = ?")
             .bind(series_id)
             .execute(self.sqlite.pool())
@@ -133,6 +314,7 @@ impl DualSyncRepository {
         &self,
         series_id: &str,
     ) -> Result<(), RepositoryError> {
+        maybe_inject_test_failure("postgres", "rollback_create_series", series_id)?;
         sqlx::query("DELETE FROM series WHERE id = $1")
             .bind(series_id)
             .execute(self.postgres.pool())
@@ -146,6 +328,7 @@ impl DualSyncRepository {
         series_id: &str,
         snapshot: &SeriesSnapshot,
     ) -> Result<(), RepositoryError> {
+        maybe_inject_test_failure("sqlite", "restore_series_snapshot", series_id)?;
         sqlx::query(
             "UPDATE series
              SET status = ?,
@@ -171,6 +354,7 @@ impl DualSyncRepository {
         series_id: &str,
         snapshot: &SeriesSnapshot,
     ) -> Result<(), RepositoryError> {
+        maybe_inject_test_failure("postgres", "restore_series_snapshot", series_id)?;
         sqlx::query(
             "UPDATE series
              SET status = $1,
@@ -197,6 +381,7 @@ impl DualSyncRepository {
         series_id: &str,
         snapshot: &SeriesSnapshot,
     ) -> Result<(), RepositoryError> {
+        maybe_inject_test_failure("sqlite", "rollback_append_commit", commit_id)?;
         let mut tx = self.sqlite.pool().begin().await.map_err(map_sqlx_error)?;
 
         sqlx::query("DELETE FROM commits WHERE id = ?")
@@ -232,6 +417,7 @@ impl DualSyncRepository {
         series_id: &str,
         snapshot: &SeriesSnapshot,
     ) -> Result<(), RepositoryError> {
+        maybe_inject_test_failure("postgres", "rollback_append_commit", commit_id)?;
         let mut tx = self.postgres.pool().begin().await.map_err(map_sqlx_error)?;
 
         sqlx::query("DELETE FROM commits WHERE id = $1")
@@ -269,6 +455,11 @@ impl DualSyncRepository {
             return Ok(());
         }
 
+        maybe_inject_test_failure(
+            "sqlite",
+            "rollback_mark_silent_series",
+            &format_affected_series_ids(affected_series_ids),
+        )?;
         let mut tx = self.sqlite.pool().begin().await.map_err(map_sqlx_error)?;
         for series_id in affected_series_ids {
             sqlx::query("UPDATE series SET status = 'active' WHERE id = ?")
@@ -289,6 +480,11 @@ impl DualSyncRepository {
             return Ok(());
         }
 
+        maybe_inject_test_failure(
+            "postgres",
+            "rollback_mark_silent_series",
+            &format_affected_series_ids(affected_series_ids),
+        )?;
         let mut tx = self.postgres.pool().begin().await.map_err(map_sqlx_error)?;
         for series_id in affected_series_ids {
             sqlx::query("UPDATE series SET status = 'active' WHERE id = $1")
@@ -369,7 +565,233 @@ impl DualSyncRepository {
         }
     }
 
+    async fn load_unresolved_consistency_alerts(
+        &self,
+    ) -> Result<Vec<ConsistencyAlertRecord>, RepositoryError> {
+        let sqlite_future = async {
+            let rows: Vec<(String, String, String, String, String)> = sqlx::query_as(
+                "SELECT id, op_type, commit_id, reason, created_at
+                 FROM consistency_alerts
+                 WHERE resolved_at IS NULL",
+            )
+            .fetch_all(self.sqlite.pool())
+            .await
+            .map_err(map_sqlx_error)?;
+
+            Ok::<Vec<ConsistencyAlertRecord>, RepositoryError>(
+                rows.into_iter()
+                    .map(|(id, op_type, commit_id, reason, created_at)| ConsistencyAlertRecord {
+                        id,
+                        op_type,
+                        commit_id,
+                        reason,
+                        created_at,
+                    })
+                    .collect(),
+            )
+        };
+        let postgres_future = async {
+            let rows: Vec<(String, String, String, String, String)> = sqlx::query_as(
+                "SELECT
+                    id,
+                    op_type,
+                    commit_id,
+                    reason,
+                    to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at
+                 FROM consistency_alerts
+                 WHERE resolved_at IS NULL",
+            )
+            .fetch_all(self.postgres.pool())
+            .await
+            .map_err(map_sqlx_error)?;
+
+            Ok::<Vec<ConsistencyAlertRecord>, RepositoryError>(
+                rows.into_iter()
+                    .map(|(id, op_type, commit_id, reason, created_at)| ConsistencyAlertRecord {
+                        id,
+                        op_type,
+                        commit_id,
+                        reason,
+                        created_at,
+                    })
+                    .collect(),
+            )
+        };
+
+        let (sqlite_result, postgres_result) = tokio::join!(sqlite_future, postgres_future);
+        let sqlite_alerts = sqlite_result?;
+        let postgres_alerts = postgres_result?;
+        Ok(merge_unresolved_alerts(sqlite_alerts, postgres_alerts))
+    }
+
+    async fn apply_startup_self_heal(
+        &self,
+        alert: &ParsedConsistencyAlert,
+    ) -> Result<(), RepositoryError> {
+        match &alert.detail {
+            StartupSelfHealDetail::CreateSeries { series_id } => {
+                self.rollback_create_series_on_side(alert.succeeded_side, series_id)
+                    .await
+            }
+            StartupSelfHealDetail::AppendCommit { series_id } => {
+                let success_snapshot = self
+                    .load_series_snapshot_on_side(alert.succeeded_side, series_id)
+                    .await?;
+                let failed_snapshot = self
+                    .load_series_snapshot_on_side(alert.failed_side, series_id)
+                    .await?;
+                let Some(_) = success_snapshot else {
+                    return Err(RepositoryError::storage(format!(
+                        "series `{series_id}` is missing on succeeded side `{}` during startup append_commit repair",
+                        alert.succeeded_side.as_str()
+                    )));
+                };
+                let Some(failed_snapshot) = failed_snapshot else {
+                    return Err(RepositoryError::storage(format!(
+                        "series `{series_id}` is missing on failed side `{}` during startup append_commit repair",
+                        alert.failed_side.as_str()
+                    )));
+                };
+
+                self.rollback_append_commit_on_side(
+                    alert.succeeded_side,
+                    &alert.commit_id,
+                    series_id,
+                    &failed_snapshot,
+                )
+                .await
+            }
+            StartupSelfHealDetail::ArchiveSeries { series_id } => {
+                let success_snapshot = self
+                    .load_series_snapshot_on_side(alert.succeeded_side, series_id)
+                    .await?;
+                let failed_snapshot = self
+                    .load_series_snapshot_on_side(alert.failed_side, series_id)
+                    .await?;
+                let Some(_) = success_snapshot else {
+                    return Err(RepositoryError::storage(format!(
+                        "series `{series_id}` is missing on succeeded side `{}` during startup archive repair",
+                        alert.succeeded_side.as_str()
+                    )));
+                };
+                let Some(failed_snapshot) = failed_snapshot else {
+                    return Err(RepositoryError::storage(format!(
+                        "series `{series_id}` is missing on failed side `{}` during startup archive repair",
+                        alert.failed_side.as_str()
+                    )));
+                };
+
+                self.restore_series_snapshot_on_side(
+                    alert.succeeded_side,
+                    series_id,
+                    &failed_snapshot,
+                )
+                .await
+            }
+            StartupSelfHealDetail::MarkSilentSeries {
+                threshold_before: _,
+                affected_series_ids,
+            } => {
+                for series_id in affected_series_ids {
+                    let success_snapshot = self
+                        .load_series_snapshot_on_side(alert.succeeded_side, series_id)
+                        .await?;
+                    let failed_snapshot = self
+                        .load_series_snapshot_on_side(alert.failed_side, series_id)
+                        .await?;
+                    let Some(_) = success_snapshot else {
+                        return Err(RepositoryError::storage(format!(
+                            "series `{series_id}` is missing on succeeded side `{}` during startup mark_silent repair",
+                            alert.succeeded_side.as_str()
+                        )));
+                    };
+                    let Some(failed_snapshot) = failed_snapshot else {
+                        return Err(RepositoryError::storage(format!(
+                            "series `{series_id}` is missing on failed side `{}` during startup mark_silent repair",
+                            alert.failed_side.as_str()
+                        )));
+                    };
+
+                    self.restore_series_snapshot_on_side(
+                        alert.succeeded_side,
+                        series_id,
+                        &failed_snapshot,
+                    )
+                    .await?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+
+    async fn load_series_snapshot_on_side(
+        &self,
+        side: BackendSide,
+        series_id: &str,
+    ) -> Result<Option<SeriesSnapshot>, RepositoryError> {
+        match side {
+            BackendSide::Sqlite => self.load_sqlite_series_snapshot_optional(series_id).await,
+            BackendSide::Postgres => self.load_postgres_series_snapshot_optional(series_id).await,
+        }
+    }
+
+    async fn rollback_create_series_on_side(
+        &self,
+        side: BackendSide,
+        series_id: &str,
+    ) -> Result<(), RepositoryError> {
+        match side {
+            BackendSide::Sqlite => self.rollback_sqlite_create_series(series_id).await,
+            BackendSide::Postgres => self.rollback_postgres_create_series(series_id).await,
+        }
+    }
+
+    async fn rollback_append_commit_on_side(
+        &self,
+        side: BackendSide,
+        commit_id: &str,
+        series_id: &str,
+        snapshot: &SeriesSnapshot,
+    ) -> Result<(), RepositoryError> {
+        match side {
+            BackendSide::Sqlite => {
+                self.rollback_sqlite_append_commit(commit_id, series_id, snapshot)
+                    .await
+            }
+            BackendSide::Postgres => {
+                self.rollback_postgres_append_commit(commit_id, series_id, snapshot)
+                    .await
+            }
+        }
+    }
+
+    async fn restore_series_snapshot_on_side(
+        &self,
+        side: BackendSide,
+        series_id: &str,
+        snapshot: &SeriesSnapshot,
+    ) -> Result<(), RepositoryError> {
+        match side {
+            BackendSide::Sqlite => self.restore_sqlite_series_snapshot(series_id, snapshot).await,
+            BackendSide::Postgres => {
+                self.restore_postgres_series_snapshot(series_id, snapshot)
+                    .await
+            }
+        }
+    }
+
     async fn resolve_consistency_alert(&self, alert_id: &str, op_type: &str) {
+        let _ = self
+            .resolve_consistency_alert_for_startup(alert_id, op_type)
+            .await;
+    }
+
+    async fn resolve_consistency_alert_for_startup(
+        &self,
+        alert_id: &str,
+        op_type: &str,
+    ) -> Result<(), RepositoryError> {
         let resolved_at = now_utc_rfc3339_seconds();
 
         let sqlite_result = sqlx::query(
@@ -384,7 +806,7 @@ impl DualSyncRepository {
         .await
         .map_err(map_sqlx_error);
 
-        if let Err(error) = sqlite_result {
+        if let Err(error) = &sqlite_result {
             tracing::error!(
                 component = "repository",
                 operation = op_type,
@@ -407,7 +829,7 @@ impl DualSyncRepository {
         .await
         .map_err(map_sqlx_error);
 
-        if let Err(error) = postgres_result {
+        if let Err(error) = &postgres_result {
             tracing::error!(
                 component = "repository",
                 operation = op_type,
@@ -417,7 +839,187 @@ impl DualSyncRepository {
                 "failed to resolve consistency alert"
             );
         }
+
+        match (sqlite_result, postgres_result) {
+            (Ok(_), Ok(_)) => Ok(()),
+            (Err(sqlite_error), Ok(_)) => Err(RepositoryError::storage(format!(
+                "failed to resolve consistency alert `{alert_id}` on sqlite: {sqlite_error}"
+            ))),
+            (Ok(_), Err(postgres_error)) => Err(RepositoryError::storage(format!(
+                "failed to resolve consistency alert `{alert_id}` on postgres: {postgres_error}"
+            ))),
+            (Err(sqlite_error), Err(postgres_error)) => Err(RepositoryError::storage(format!(
+                "failed to resolve consistency alert `{alert_id}` on both backends; sqlite_error={sqlite_error}; postgres_error={postgres_error}"
+            ))),
+        }
     }
+}
+
+fn merge_unresolved_alerts(
+    sqlite_alerts: Vec<ConsistencyAlertRecord>,
+    postgres_alerts: Vec<ConsistencyAlertRecord>,
+) -> Vec<ConsistencyAlertRecord> {
+    let mut alerts_by_id = BTreeMap::new();
+    for alert in sqlite_alerts.into_iter().chain(postgres_alerts) {
+        alerts_by_id.entry(alert.id.clone()).or_insert(alert);
+    }
+
+    let mut alerts: Vec<_> = alerts_by_id.into_values().collect();
+    alerts.sort_by(|left, right| {
+        left.created_at
+            .cmp(&right.created_at)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    alerts
+}
+
+fn parse_consistency_alert(
+    alert: &ConsistencyAlertRecord,
+) -> Result<ParsedConsistencyAlert, String> {
+    let op_type = StartupSelfHealOperation::from_op_type(&alert.op_type).ok_or_else(|| {
+        format!("unsupported consistency alert op_type `{}`", alert.op_type)
+    })?;
+    let succeeded_side = parse_backend_side_field(&alert.reason, "succeeded_side=")?;
+    let failed_side = parse_backend_side_field(&alert.reason, "failed_side=")?;
+    let detail = extract_detail_segment(&alert.reason)?;
+    let parsed_detail = match op_type {
+        StartupSelfHealOperation::CreateSeries => {
+            parse_series_detail(detail, "create_series", &alert.commit_id)?
+        }
+        StartupSelfHealOperation::AppendCommit => {
+            parse_append_commit_detail(detail, &alert.commit_id)?
+        }
+        StartupSelfHealOperation::ArchiveSeries => {
+            parse_series_detail(detail, "archive_series", &alert.commit_id)?
+        }
+        StartupSelfHealOperation::MarkSilentSeries => parse_mark_silent_detail(detail)?,
+    };
+
+    Ok(ParsedConsistencyAlert {
+        id: alert.id.clone(),
+        op_type,
+        commit_id: alert.commit_id.clone(),
+        succeeded_side,
+        failed_side,
+        detail: parsed_detail,
+    })
+}
+
+fn parse_backend_side_field(reason: &str, marker: &str) -> Result<BackendSide, String> {
+    let value = extract_marker_value(reason, marker)
+        .ok_or_else(|| format!("missing `{marker}` in consistency alert reason"))?;
+    BackendSide::from_str(&value)
+        .ok_or_else(|| format!("unsupported backend side `{value}` in consistency alert reason"))
+}
+
+fn extract_detail_segment(reason: &str) -> Result<&str, String> {
+    let marker = "; detail=";
+    let Some(index) = reason.rfind(marker) else {
+        return Err("missing `detail=` segment in consistency alert reason".to_string());
+    };
+
+    Ok(reason[index + marker.len()..].trim())
+}
+
+fn extract_marker_value(reason: &str, marker: &str) -> Option<String> {
+    let index = reason.find(marker)?;
+    let start = index + marker.len();
+    let remainder = &reason[start..];
+    let end = remainder.find(';').unwrap_or(remainder.len());
+    Some(remainder[..end].trim().to_string())
+}
+
+fn parse_series_detail(
+    detail: &str,
+    operation: &str,
+    commit_id: &str,
+) -> Result<StartupSelfHealDetail, String> {
+    let Some(series_id) = detail.strip_prefix("series_id=") else {
+        return Err(format!(
+            "invalid `{operation}` detail `{detail}`, expected `series_id=...`"
+        ));
+    };
+    let series_id = series_id.trim().to_string();
+    if series_id.is_empty() {
+        return Err(format!("`{operation}` detail is missing series_id"));
+    }
+    if series_id != commit_id {
+        return Err(format!(
+            "`{operation}` detail series_id `{series_id}` does not match commit_id column `{commit_id}`"
+        ));
+    }
+
+    match operation {
+        "create_series" => Ok(StartupSelfHealDetail::CreateSeries { series_id }),
+        "archive_series" => Ok(StartupSelfHealDetail::ArchiveSeries { series_id }),
+        _ => Err(format!("unsupported series detail operation `{operation}`")),
+    }
+}
+
+fn parse_append_commit_detail(
+    detail: &str,
+    commit_id: &str,
+) -> Result<StartupSelfHealDetail, String> {
+    let Some(series_segment) = detail.strip_prefix("series_id=") else {
+        return Err(format!(
+            "invalid `append_commit` detail `{detail}`, expected `series_id=..., commit_id=...`"
+        ));
+    };
+    let Some((series_id, detail_commit_id)) = series_segment.split_once(", commit_id=") else {
+        return Err(format!(
+            "invalid `append_commit` detail `{detail}`, expected `series_id=..., commit_id=...`"
+        ));
+    };
+    let series_id = series_id.trim().to_string();
+    let detail_commit_id = detail_commit_id.trim();
+    if series_id.is_empty() {
+        return Err("`append_commit` detail is missing series_id".to_string());
+    }
+    if detail_commit_id != commit_id {
+        return Err(format!(
+            "`append_commit` detail commit_id `{detail_commit_id}` does not match commit_id column `{commit_id}`"
+        ));
+    }
+
+    Ok(StartupSelfHealDetail::AppendCommit { series_id })
+}
+
+fn parse_mark_silent_detail(detail: &str) -> Result<StartupSelfHealDetail, String> {
+    let Some(threshold_segment) = detail.strip_prefix("threshold_before=") else {
+        return Err(format!(
+            "invalid `mark_silent_series` detail `{detail}`, expected `threshold_before=..., affected_series_ids=...`"
+        ));
+    };
+    let Some((threshold_before, affected_series_ids)) =
+        threshold_segment.split_once(", affected_series_ids=")
+    else {
+        return Err(format!(
+            "invalid `mark_silent_series` detail `{detail}`, expected `threshold_before=..., affected_series_ids=...`"
+        ));
+    };
+
+    let threshold_before = threshold_before.trim().to_string();
+    if threshold_before.is_empty() {
+        return Err("`mark_silent_series` detail is missing threshold_before".to_string());
+    }
+    let affected_series_ids = parse_affected_series_ids(affected_series_ids.trim());
+
+    Ok(StartupSelfHealDetail::MarkSilentSeries {
+        threshold_before,
+        affected_series_ids,
+    })
+}
+
+fn parse_affected_series_ids(raw: &str) -> Vec<String> {
+    if raw == "<none>" || raw.is_empty() {
+        return Vec::new();
+    }
+
+    raw.split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
 }
 
 fn is_pg_timeout_error(error: &RepositoryError) -> bool {
@@ -1179,5 +1781,70 @@ impl MemoRepository for DualSyncRepository {
         query: SearchSeriesQuery,
     ) -> Result<Vec<SeriesRecord>, RepositoryError> {
         self.sqlite.search_series_by_name(query).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        merge_unresolved_alerts, parse_consistency_alert, BackendSide, ConsistencyAlertRecord,
+        StartupSelfHealDetail, StartupSelfHealOperation,
+    };
+
+    #[test]
+    fn parses_append_commit_consistency_alert_reason() {
+        let alert = ConsistencyAlertRecord {
+            id: "alert-1".to_string(),
+            op_type: "append_commit".to_string(),
+            commit_id: "commit-1".to_string(),
+            reason: "dual_sync append_commit single-side success; succeeded_side=sqlite; failed_side=postgres; operation_error=simulated; detail=series_id=series-1, commit_id=commit-1".to_string(),
+            created_at: "2026-03-17T00:00:00Z".to_string(),
+        };
+
+        let parsed = parse_consistency_alert(&alert).expect("alert should parse");
+
+        assert_eq!(parsed.id, "alert-1");
+        assert_eq!(parsed.op_type, StartupSelfHealOperation::AppendCommit);
+        assert_eq!(parsed.succeeded_side, BackendSide::Sqlite);
+        assert_eq!(parsed.failed_side, BackendSide::Postgres);
+        assert_eq!(
+            parsed.detail,
+            StartupSelfHealDetail::AppendCommit {
+                series_id: "series-1".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn merges_and_sorts_unresolved_alerts_by_id_and_created_at() {
+        let sqlite_alerts = vec![
+            ConsistencyAlertRecord {
+                id: "alert-b".to_string(),
+                op_type: "archive_series".to_string(),
+                commit_id: "series-b".to_string(),
+                reason: "reason-b".to_string(),
+                created_at: "2026-03-17T00:02:00Z".to_string(),
+            },
+            ConsistencyAlertRecord {
+                id: "alert-a".to_string(),
+                op_type: "create_series".to_string(),
+                commit_id: "series-a".to_string(),
+                reason: "reason-a".to_string(),
+                created_at: "2026-03-17T00:01:00Z".to_string(),
+            },
+        ];
+        let postgres_alerts = vec![ConsistencyAlertRecord {
+            id: "alert-a".to_string(),
+            op_type: "create_series".to_string(),
+            commit_id: "series-a".to_string(),
+            reason: "reason-a".to_string(),
+            created_at: "2026-03-17T00:01:00Z".to_string(),
+        }];
+
+        let merged = merge_unresolved_alerts(sqlite_alerts, postgres_alerts);
+
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0].id, "alert-a");
+        assert_eq!(merged[1].id, "alert-b");
     }
 }

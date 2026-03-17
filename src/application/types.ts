@@ -21,11 +21,21 @@ export interface RpcError {
   message: string;
 }
 
+export interface StartupSelfHealSummary {
+  scannedAlerts: number;
+  repairedAlerts: number;
+  unresolvedAlerts: number;
+  failedAlerts: number;
+  completedAt: string;
+  messages: string[];
+}
+
 export interface RpcMeta {
   path: string;
   runtimeMode: RuntimeMode;
   usedFallback: boolean;
   respondedAtUnixMs: number;
+  startupSelfHeal: StartupSelfHealSummary;
 }
 
 export interface SeriesSummary {

@@ -16,7 +16,7 @@ use super::dto::{
 use crate::repository::{
     self, AppendCommitInput, ArchiveSeriesInput, CommitRecord, CreateSeriesInput,
     DynMemoRepository, ListSeriesQuery, MarkSilentSeriesInput, RepositoryError, SearchSeriesQuery,
-    SeriesRecord, TimelineQuery,
+    SeriesRecord, StartupSelfHealSummary, TimelineQuery,
 };
 
 const SQLITE_DB_FILE_NAME: &str = "remember.sqlite3";
@@ -30,6 +30,7 @@ pub struct ApplicationService {
 #[derive(Clone)]
 pub struct ApplicationServiceState {
     service: Arc<ApplicationService>,
+    startup_self_heal: StartupSelfHealSummary,
 }
 
 #[derive(Clone)]
@@ -91,14 +92,19 @@ impl From<RepositoryError> for ApplicationError {
 }
 
 impl ApplicationServiceState {
-    pub fn new(service: ApplicationService) -> Self {
+    pub fn new(service: ApplicationService, startup_self_heal: StartupSelfHealSummary) -> Self {
         Self {
             service: Arc::new(service),
+            startup_self_heal,
         }
     }
 
     pub fn service(&self) -> &ApplicationService {
         self.service.as_ref()
+    }
+
+    pub fn startup_self_heal(&self) -> &StartupSelfHealSummary {
+        &self.startup_self_heal
     }
 }
 
@@ -307,7 +313,7 @@ pub async fn bootstrap_sqlite_service<R: Runtime>(
     let service = ApplicationService::new(repository, silent_days_threshold);
 
     Ok(ServiceBootstrapReport {
-        service_state: ApplicationServiceState::new(service),
+        service_state: ApplicationServiceState::new(service, StartupSelfHealSummary::clean()),
         backend_target: database_path.display().to_string(),
         warnings,
     })
@@ -330,7 +336,7 @@ pub async fn bootstrap_postgres_service(
     let service = ApplicationService::new(repository, silent_days_threshold);
 
     Ok(ServiceBootstrapReport {
-        service_state: ApplicationServiceState::new(service),
+        service_state: ApplicationServiceState::new(service, StartupSelfHealSummary::clean()),
         backend_target: "postgres_only(configured_dsn)".to_string(),
         warnings: Vec::new(),
     })
@@ -362,12 +368,13 @@ pub async fn bootstrap_dual_sync_service<R: Runtime>(
             ))
         })?;
 
-    let repository: DynMemoRepository =
-        Arc::new(repository::DualSyncRepository::new(sqlite_pool, postgres_pool));
+    let dual_sync_repository = repository::DualSyncRepository::new(sqlite_pool, postgres_pool);
+    let startup_self_heal = dual_sync_repository.run_startup_self_heal().await;
+    let repository: DynMemoRepository = Arc::new(dual_sync_repository);
     let service = ApplicationService::new(repository, silent_days_threshold);
 
     Ok(ServiceBootstrapReport {
-        service_state: ApplicationServiceState::new(service),
+        service_state: ApplicationServiceState::new(service, startup_self_heal),
         backend_target: format!(
             "dual_sync(sqlite={}, postgres=configured_dsn)",
             database_path.display()
@@ -505,7 +512,10 @@ pub(crate) async fn build_test_service_state() -> ApplicationServiceState {
         .await
         .expect("failed to run sqlite migrations for application service tests");
     let repository: DynMemoRepository = Arc::new(repository::SqliteRepository::new(pool));
-    ApplicationServiceState::new(ApplicationService::new(repository, 7))
+    ApplicationServiceState::new(
+        ApplicationService::new(repository, 7),
+        StartupSelfHealSummary::clean(),
+    )
 }
 
 #[cfg(test)]

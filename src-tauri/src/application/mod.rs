@@ -82,6 +82,23 @@ pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) {
         backend_target = %service_bootstrap.backend_target,
         "application service initialized"
     );
+    let startup_self_heal = service_bootstrap.service_state.startup_self_heal();
+    tracing::info!(
+        component = "repository",
+        scanned_alerts = startup_self_heal.scanned_alerts,
+        repaired_alerts = startup_self_heal.repaired_alerts,
+        unresolved_alerts = startup_self_heal.unresolved_alerts,
+        failed_alerts = startup_self_heal.failed_alerts,
+        completed_at = %startup_self_heal.completed_at,
+        "startup self-heal completed"
+    );
+    for message in &startup_self_heal.messages {
+        tracing::warn!(
+            component = "repository",
+            warning = %message,
+            "startup self-heal warning"
+        );
+    }
 
     app.manage(repository);
     app.manage(service_bootstrap.service_state);
