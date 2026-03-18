@@ -1,5 +1,6 @@
 import type {
   CommitAppendData,
+  CommitItem,
   CommandProbe,
   LayerState,
   RpcData,
@@ -10,6 +11,7 @@ import type {
   SeriesCreateData,
   SeriesListData,
   SeriesScanSilentData,
+  SeriesSummary,
   StartupSelfHealSummary,
   TimelineListData,
 } from "../application/types";
@@ -33,17 +35,30 @@ export interface TimelineRequest {
   limit: number;
 }
 
+interface MockStore {
+  series: SeriesSummary[];
+  commits: CommitItem[];
+  nextCommitOrdinal: number;
+  nextTimestampMs: number;
+}
+
 const DEFAULT_MODE: RuntimeMode = "sqlite_only";
 const RUNTIME_MODE_PATTERN = /\[(sqlite_only|postgres_only|dual_sync)\]/;
 const FALLBACK_PATTERN = /\[CONFIG_FALLBACK\]/;
 const HOTKEY_DISABLED_PATTERN = /\[HOTKEY_DISABLED\]/;
 const DEFAULT_PROBE_PATH = "series.create";
+const DEFAULT_MOCK_SESSION = "default";
 const VALIDATION_ERROR = "VALIDATION_ERROR";
+const NOT_FOUND = "NOT_FOUND";
+const CONFLICT = "CONFLICT";
 const UNKNOWN_COMMAND = "UNKNOWN_COMMAND";
 const PG_TIMEOUT = "PG_TIMEOUT";
 const DUAL_WRITE_FAILED = "DUAL_WRITE_FAILED";
 const INVOKE_FAILED = "INVOKE_FAILED";
 const FORCE_ERROR_CODE_FIELD = "__forceErrorCode";
+const MAX_EXCERPT_LENGTH = 48;
+const INITIAL_MOCK_TIMESTAMP_MS = Date.parse("2026-03-16T12:00:00Z");
+const mockStores = new Map<string, MockStore>();
 
 export function parseMockRuntimeStatus(search: string): RuntimeStatus {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
@@ -137,7 +152,7 @@ function isTauriRuntime(): boolean {
 
 export function readMockCommandProbe(search: string): CommandProbe {
   const runtimeStatus = parseMockRuntimeStatus(search);
-  const request = buildMockRequest(search);
+  const request = buildMockRequest(search, undefined, undefined, runtimeStatus.mode);
 
   return {
     source: "mock",
@@ -147,6 +162,10 @@ export function readMockCommandProbe(search: string): CommandProbe {
       request.payload,
       runtimeStatus,
       request.startupSelfHeal,
+      {
+        preview: true,
+        sessionKey: request.sessionKey,
+      },
     ),
   };
 }
@@ -156,13 +175,14 @@ export function readMockSeriesList(
   request: SeriesListRequest = buildDefaultSeriesListRequest(),
 ): RpcEnvelope<SeriesListData> {
   const runtimeStatus = parseMockRuntimeStatus(search);
-  const mockRequest = buildMockRequest(search, "series.list", { ...request });
+  const mockRequest = buildMockRequest(search, "series.list", { ...request }, runtimeStatus.mode);
 
   return mockInvoke(
     "series.list",
     mockRequest.payload,
     runtimeStatus,
     mockRequest.startupSelfHeal,
+    { sessionKey: mockRequest.sessionKey },
   ) as RpcEnvelope<SeriesListData>;
 }
 
@@ -171,13 +191,14 @@ export function readMockCreateSeries(
   name: string,
 ): RpcEnvelope<SeriesCreateData> {
   const runtimeStatus = parseMockRuntimeStatus(search);
-  const mockRequest = buildMockRequest(search, "series.create", { name });
+  const mockRequest = buildMockRequest(search, "series.create", { name }, runtimeStatus.mode);
 
   return mockInvoke(
     "series.create",
     mockRequest.payload,
     runtimeStatus,
     mockRequest.startupSelfHeal,
+    { sessionKey: mockRequest.sessionKey },
   ) as RpcEnvelope<SeriesCreateData>;
 }
 
@@ -190,13 +211,14 @@ export function readMockTimeline(
   const mockRequest = buildMockRequest(search, "timeline.list", {
     seriesId,
     ...request,
-  });
+  }, runtimeStatus.mode);
 
   return mockInvoke(
     "timeline.list",
     mockRequest.payload,
     runtimeStatus,
     mockRequest.startupSelfHeal,
+    { sessionKey: mockRequest.sessionKey },
   ) as RpcEnvelope<TimelineListData>;
 }
 
@@ -211,13 +233,14 @@ export function readMockAppendCommit(
     seriesId,
     content,
     clientTs,
-  });
+  }, runtimeStatus.mode);
 
   return mockInvoke(
     "commit.append",
     mockRequest.payload,
     runtimeStatus,
     mockRequest.startupSelfHeal,
+    { sessionKey: mockRequest.sessionKey },
   ) as RpcEnvelope<CommitAppendData>;
 }
 
@@ -226,13 +249,14 @@ export function readMockArchiveSeries(
   seriesId: string,
 ): RpcEnvelope<SeriesArchiveData> {
   const runtimeStatus = parseMockRuntimeStatus(search);
-  const mockRequest = buildMockRequest(search, "series.archive", { seriesId });
+  const mockRequest = buildMockRequest(search, "series.archive", { seriesId }, runtimeStatus.mode);
 
   return mockInvoke(
     "series.archive",
     mockRequest.payload,
     runtimeStatus,
     mockRequest.startupSelfHeal,
+    { sessionKey: mockRequest.sessionKey },
   ) as RpcEnvelope<SeriesArchiveData>;
 }
 
@@ -388,7 +412,7 @@ function uniqueWarnings(warnings: string[]): string[] {
 
 async function readCommandProbe(runtimeStatus: RuntimeStatus): Promise<CommandProbe> {
   const search = typeof window === "undefined" ? "" : window.location.search;
-  const request = buildMockRequest(search);
+  const request = buildMockRequest(search, undefined, undefined, runtimeStatus.mode);
 
   if (!isTauriRuntime()) {
     return {
@@ -399,6 +423,10 @@ async function readCommandProbe(runtimeStatus: RuntimeStatus): Promise<CommandPr
         request.payload,
         runtimeStatus,
         request.startupSelfHeal,
+        {
+          preview: true,
+          sessionKey: request.sessionKey,
+        },
       ),
     };
   }
@@ -436,7 +464,7 @@ async function invokeRpcEnvelope<T extends RpcData>(
 ): Promise<RpcEnvelope<T>> {
   const runtimeStatus = await readRuntimeStatus();
   const search = typeof window === "undefined" ? "" : window.location.search;
-  const request = buildMockRequest(search, path, payload);
+  const request = buildMockRequest(search, path, payload, runtimeStatus.mode);
 
   if (!isTauriRuntime()) {
     return mockInvoke(
@@ -444,6 +472,7 @@ async function invokeRpcEnvelope<T extends RpcData>(
       request.payload,
       runtimeStatus,
       request.startupSelfHeal,
+      { sessionKey: request.sessionKey },
     ) as RpcEnvelope<T>;
   }
 
@@ -468,10 +497,12 @@ function buildMockRequest(
   search: string,
   forcedPath?: string,
   payloadOverride?: Record<string, unknown>,
+  runtimeMode: RuntimeMode = DEFAULT_MODE,
 ): {
   path: string;
   payload: Record<string, unknown>;
   startupSelfHeal: StartupSelfHealSummary;
+  sessionKey: string;
 } {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const path = forcedPath ?? normalizeProbePath(params.get("rpc_path"));
@@ -492,6 +523,7 @@ function buildMockRequest(
     path,
     payload,
     startupSelfHeal: buildStartupSelfHealSummary(params),
+    sessionKey: buildMockSessionKey(params, runtimeMode),
   };
 }
 
@@ -594,6 +626,10 @@ function mockInvoke(
   payload: Record<string, unknown>,
   runtimeStatus: RuntimeStatus,
   startupSelfHeal: StartupSelfHealSummary,
+  options?: {
+    preview?: boolean;
+    sessionKey?: string;
+  },
 ): RpcEnvelope<RpcData> {
   const meta = {
     path,
@@ -604,7 +640,11 @@ function mockInvoke(
   };
 
   try {
-    const data = mockDispatch(path, payload);
+    const data = mockDispatch(
+      path,
+      payload,
+      resolveMockStore(options?.sessionKey ?? buildMockSessionKey(new URLSearchParams(), runtimeStatus.mode), options?.preview ?? false),
+    );
     return {
       ok: true,
       data,
@@ -629,7 +669,11 @@ function mockInvoke(
   }
 }
 
-function mockDispatch(path: string, payload: Record<string, unknown>): RpcData {
+function mockDispatch(
+  path: string,
+  payload: Record<string, unknown>,
+  store: MockStore,
+): RpcData {
   const forcedError = readForcedRpcError(payload);
   if (forcedError !== null) {
     throw forcedError;
@@ -638,72 +682,118 @@ function mockDispatch(path: string, payload: Record<string, unknown>): RpcData {
   switch (path) {
     case "series.create": {
       const name = requireNonEmptyString(payload, "name");
+      const createdAt = nextMockTimestamp(store);
       const data: SeriesCreateData = {
         series: {
-          id: "stub-series-inbox",
+          id: buildMockSeriesId(name, store),
           name,
           status: "active",
-          lastUpdatedAt: "2026-03-16T00:00:00Z",
-          latestExcerpt: "stubbed-command-shell",
-          createdAt: "2026-03-15T00:00:00Z",
+          lastUpdatedAt: createdAt,
+          latestExcerpt: "",
+          createdAt,
         },
       };
+      store.series.push(cloneSeriesSummary(data.series));
       return data;
     }
     case "series.list": {
       const query = requireString(payload, "query");
       const includeArchived = requireBoolean(payload, "includeArchived");
-      const cursor = requireNullableString(payload, "cursor");
       const limit = requirePositiveInteger(payload, "limit");
-      const items = buildMockSeriesItems().filter((item) =>
-        query.length === 0 ? true : item.name.toLowerCase().includes(query.toLowerCase()),
-      );
+      requireNullableString(payload, "cursor");
+      const items = sortSeriesItems(
+        store.series.filter((item) => {
+          if (!includeArchived && item.status === "archived") {
+            return false;
+          }
+
+          return query.length === 0 ? true : item.name.toLowerCase().includes(query.toLowerCase());
+        }),
+      )
+        .slice(0, limit)
+        .map(cloneSeriesSummary);
       const data: SeriesListData = {
         items,
-        nextCursor: query.length > 0 ? null : cursor,
+        nextCursor: null,
         limitEcho: limit,
       };
-      void includeArchived;
       return data;
     }
     case "commit.append": {
       const seriesId = requireNonEmptyString(payload, "seriesId");
       const content = requireNonEmptyString(payload, "content");
-      requireRfc3339String(payload, "clientTs");
+      const createdAt = requireRfc3339String(payload, "clientTs");
+      const series = store.series.find((item) => item.id === seriesId);
+      if (series === undefined) {
+        throw {
+          code: NOT_FOUND,
+          message: `series \`${seriesId}\` does not exist`,
+        };
+      }
+      if (series.status === "archived") {
+        throw {
+          code: CONFLICT,
+          message: `series \`${seriesId}\` is archived and cannot receive new commits`,
+        };
+      }
+
+      const commitId = buildMockCommitId(store);
+      const latestExcerpt = buildExcerpt(content);
+      series.status = "active";
+      series.lastUpdatedAt = createdAt;
+      series.latestExcerpt = latestExcerpt;
+      delete series.archivedAt;
+      const commit: CommitItem = {
+        id: commitId,
+        seriesId,
+        content,
+        createdAt,
+      };
+      store.commits.push(commit);
       const data: CommitAppendData = {
-        commit: {
-          id: "stub-commit-001",
-          seriesId,
-          content,
-          createdAt: "2026-03-16T00:00:00Z",
-        },
-        series: {
-          id: seriesId,
-          name: "Stub Series",
-          status: "active",
-          lastUpdatedAt: "2026-03-16T00:00:00Z",
-          latestExcerpt: buildExcerpt(content),
-          createdAt: "2026-03-15T00:00:00Z",
-        },
+        commit: cloneCommitItem(commit),
+        series: cloneSeriesSummary(series),
       };
       return data;
     }
     case "timeline.list": {
       const seriesId = requireNonEmptyString(payload, "seriesId");
       requireNullableString(payload, "cursor");
-      requirePositiveInteger(payload, "limit");
+      const limit = requirePositiveInteger(payload, "limit");
+      const series = store.series.find((item) => item.id === seriesId);
+      if (series === undefined) {
+        throw {
+          code: NOT_FOUND,
+          message: `series \`${seriesId}\` does not exist`,
+        };
+      }
       const data: TimelineListData = {
         seriesId,
-        items: buildMockTimelineItems(seriesId),
+        items: sortCommitItems(store.commits.filter((item) => item.seriesId === seriesId))
+          .slice(0, limit)
+          .map(cloneCommitItem),
         nextCursor: null,
       };
       return data;
     }
     case "series.archive": {
       const seriesId = requireNonEmptyString(payload, "seriesId");
+      const series = store.series.find((item) => item.id === seriesId);
+      if (series === undefined) {
+        throw {
+          code: NOT_FOUND,
+          message: `series \`${seriesId}\` does not exist`,
+        };
+      }
+      if (series.status !== "archived") {
+        const archivedAt = nextMockTimestamp(store);
+        series.status = "archived";
+        series.archivedAt = archivedAt;
+        series.lastUpdatedAt = archivedAt;
+      }
       const data: SeriesArchiveData = {
         seriesId,
-        archivedAt: "2026-03-16T00:00:00Z",
+        archivedAt: series.archivedAt ?? nextMockTimestamp(store),
       };
       return data;
     }
@@ -725,60 +815,148 @@ function mockDispatch(path: string, payload: Record<string, unknown>): RpcData {
 }
 
 function buildExcerpt(content: string): string {
-  if (content.length <= 48) {
+  if (content.length <= MAX_EXCERPT_LENGTH) {
     return content;
   }
 
-  return `${content.slice(0, 48)}...`;
+  return `${content.slice(0, MAX_EXCERPT_LENGTH)}...`;
 }
 
-function buildMockSeriesItems() {
-  return [
-    {
-      id: "series-inbox",
-      name: "Inbox",
-      status: "active" as const,
-      lastUpdatedAt: "2026-03-16T00:00:00Z",
-      latestExcerpt: "first-note",
-      createdAt: "2026-03-15T00:00:00Z",
-    },
-    {
-      id: "series-project-a",
-      name: "Project-A",
-      status: "silent" as const,
-      lastUpdatedAt: "2026-03-08T00:00:00Z",
-      latestExcerpt: "follow-up-note",
-      createdAt: "2026-03-01T00:00:00Z",
-    },
-  ];
+function buildMockSessionKey(params: URLSearchParams, runtimeMode: RuntimeMode): string {
+  const rawSession = params.get("mock_session")?.trim();
+  const sessionId = rawSession && rawSession.length > 0 ? rawSession : DEFAULT_MOCK_SESSION;
+  return `${runtimeMode}:${sessionId}`;
 }
 
-function buildMockTimelineItems(seriesId: string) {
-  if (seriesId === "series-project-a") {
-    return [
+function resolveMockStore(sessionKey: string, preview: boolean): MockStore {
+  const store = getOrCreateMockStore(sessionKey);
+  return preview ? cloneMockStore(store) : store;
+}
+
+function getOrCreateMockStore(sessionKey: string): MockStore {
+  const existing = mockStores.get(sessionKey);
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const created = createInitialMockStore();
+  mockStores.set(sessionKey, created);
+  return created;
+}
+
+function createInitialMockStore(): MockStore {
+  return {
+    series: [
+      {
+        id: "series-inbox",
+        name: "Inbox",
+        status: "active",
+        lastUpdatedAt: "2026-03-16T00:00:00Z",
+        latestExcerpt: "first-note",
+        createdAt: "2026-03-15T00:00:00Z",
+      },
+      {
+        id: "series-project-a",
+        name: "Project-A",
+        status: "silent",
+        lastUpdatedAt: "2026-03-08T00:00:00Z",
+        latestExcerpt: "follow-up-note",
+        createdAt: "2026-03-01T00:00:00Z",
+      },
+    ],
+    commits: [
+      {
+        id: "stub-commit-001",
+        seriesId: "series-inbox",
+        content: "first-note",
+        createdAt: "2026-03-16T00:00:00Z",
+      },
       {
         id: "stub-commit-002",
-        seriesId,
+        seriesId: "series-project-a",
         content: "follow-up-note",
         createdAt: "2026-03-08T09:00:00Z",
       },
       {
         id: "stub-commit-003",
-        seriesId,
+        seriesId: "series-project-a",
         content: "first-project-note",
         createdAt: "2026-03-01T08:30:00Z",
       },
-    ];
-  }
+    ],
+    nextCommitOrdinal: 4,
+    nextTimestampMs: INITIAL_MOCK_TIMESTAMP_MS,
+  };
+}
 
-  return [
-    {
-      id: "stub-commit-001",
-      seriesId,
-      content: "first-note",
-      createdAt: "2026-03-16T00:00:00Z",
-    },
-  ];
+function cloneMockStore(store: MockStore): MockStore {
+  return {
+    series: store.series.map(cloneSeriesSummary),
+    commits: store.commits.map(cloneCommitItem),
+    nextCommitOrdinal: store.nextCommitOrdinal,
+    nextTimestampMs: store.nextTimestampMs,
+  };
+}
+
+function cloneSeriesSummary(series: SeriesSummary): SeriesSummary {
+  return {
+    ...series,
+  };
+}
+
+function cloneCommitItem(commit: CommitItem): CommitItem {
+  return {
+    ...commit,
+  };
+}
+
+function sortSeriesItems(items: SeriesSummary[]): SeriesSummary[] {
+  return [...items].sort(
+    (left, right) =>
+      right.lastUpdatedAt.localeCompare(left.lastUpdatedAt) || right.id.localeCompare(left.id),
+  );
+}
+
+function sortCommitItems(items: CommitItem[]): CommitItem[] {
+  return [...items].sort(
+    (left, right) =>
+      right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id),
+  );
+}
+
+function buildMockSeriesId(name: string, store: MockStore): string {
+  const slugBase = slugify(name);
+  let suffix = 0;
+
+  while (true) {
+    const candidate = suffix === 0 ? `stub-series-${slugBase}` : `stub-series-${slugBase}-${suffix + 1}`;
+    if (!store.series.some((item) => item.id === candidate)) {
+      return candidate;
+    }
+    suffix += 1;
+  }
+}
+
+function buildMockCommitId(store: MockStore): string {
+  const commitId = `stub-commit-${String(store.nextCommitOrdinal).padStart(3, "0")}`;
+  store.nextCommitOrdinal += 1;
+  return commitId;
+}
+
+function slugify(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized.length > 0 ? normalized : "series";
+}
+
+function nextMockTimestamp(store: MockStore): string {
+  const timestamp = new Date(store.nextTimestampMs).toISOString().replace(/\.\d{3}Z$/, "Z");
+  store.nextTimestampMs += 1000;
+  return timestamp;
 }
 
 function readForcedRpcError(payload: Record<string, unknown>): { code: string; message: string } | null {
@@ -877,11 +1055,11 @@ function requireRfc3339String(payload: Record<string, unknown>, key: string): st
   if (Number.isNaN(timestamp)) {
     throw {
       code: VALIDATION_ERROR,
-      message: `field \`${key}\` must be a valid RFC3339 timestamp`,
+        message: `field \`${key}\` must be a valid RFC3339 timestamp`,
     };
   }
 
-  return raw;
+  return new Date(timestamp).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
 function requirePositiveInteger(payload: Record<string, unknown>, key: string): number {

@@ -20,7 +20,7 @@
 | P4-T1 | `phase-4/p4-t1-global-hotkey.md` | 4 | 4 | TODO |
 | P4-T2 | `phase-4/p4-t2-list-timeline-navigation.md` | 4 | 4 | TODO |
 | P4-T3 | `phase-4/p4-t3-keyboard-shortcuts.md` | 4 | 4 | BLOCKED |
-| P4-T4 | `phase-4/p4-t4-submit-and-reorder.md` | 4 | 4 | TODO |
+| P4-T4 | `phase-4/p4-t4-submit-and-reorder.md` | 4 | 4 | PASS |
 | P4-T5 | `phase-4/p4-t5-silent-detection.md` | 4 | 4 | TODO |
 | P4-T6 | `phase-4/p4-t6-archive-readonly.md` | 4 | 4 | TODO |
 | P5-T1 | `phase-5/p5-t1-full-regression.md` | 5 | 4 | TODO |

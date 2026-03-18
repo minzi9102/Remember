@@ -1,0 +1,18 @@
+case_id: P4-T4-VG-PASS
+target_mode: web_url
+env_id: ENV-SQLITE
+run_date: 20260318
+steps -> visible result -> conclusion
+
+1. 打开 `http://127.0.0.1:3000/?runtime_mode=sqlite_only&mock_session=p4t4-vg-pass`。
+2. 初始列表顶部为 `series-row-series-inbox`，较旧系列 `Project-A` 位于下方。
+3. 键盘选择 `Project-A`，以可打印字符启动提交草稿，输入 `reorder proof note` 并提交。
+4. 提交后列表顶部切换为 `series-row-series-project-a`，顶部摘录刷新为 `reorder proof note`。
+5. 截图归档为 `qa-gates-codex/P4-T4-VG-PASS_20260318_ENV-SQLITE_codex.png`。
+
+actual_result:
+- beforeTop: `series-row-series-inbox`
+- afterTop: `series-row-series-project-a`
+- topExcerpt: `reorder proof note`
+
+conclusion: PASS

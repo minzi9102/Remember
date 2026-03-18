@@ -22,7 +22,7 @@
 | P4-T1 | phase-4/p4-t1-global-hotkey.md | tauri-plugin-global-shortcut | Phase 4 / 子任务 1 | 4 | TODO |
 | P4-T2 | phase-4/p4-t2-list-timeline-navigation.md | 列表/时间线二级视图 | Phase 4 / 子任务 2 | 4 | TODO |
 | P4-T3 | phase-4/p4-t3-keyboard-shortcuts.md | ↑/↓/Enter/Esc/←/→//Shift+N/a | Phase 4 / 子任务 3 | 4 | BLOCKED |
-| P4-T4 | phase-4/p4-t4-submit-and-reorder.md | 提交后排序刷新 | Phase 4 / 子任务 4 | 4 | TODO |
+| P4-T4 | phase-4/p4-t4-submit-and-reorder.md | 提交后排序刷新 | Phase 4 / 子任务 4 | 4 | PASS |
 | P4-T5 | phase-4/p4-t5-silent-detection.md | series.scan_silent | Phase 4 / 子任务 5 | 4 | TODO |
 | P4-T6 | phase-4/p4-t6-archive-readonly.md | series.archive + timeline readonly | Phase 4 / 子任务 6 | 4 | TODO |
 | P5-T1 | phase-5/p5-t1-full-regression.md | 三模式启动与读写 | Phase 5 / 子任务 1 | 4 | TODO |

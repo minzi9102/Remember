@@ -1,0 +1,18 @@
+case_id: P4-T4-IG-FAIL
+target_mode: web_url
+env_id: ENV-SQLITE
+run_date: 20260318
+steps -> interaction result -> conclusion
+
+1. 打开 `http://127.0.0.1:3000/?runtime_mode=sqlite_only&mock_session=p4t4-ig-fail` 并开始录屏。
+2. 键盘下移到 `Project-A`，打开提交草稿后清空输入并提交。
+3. 系统返回 `VALIDATION_ERROR`，草稿栏保持打开，随后在同一草稿中输入 `recovered reorder note` 再次提交。
+4. 恢复后的合法提交成功把 `Project-A` 置顶，并且时间线首条记录刷新为 `recovered reorder note`。
+5. 录屏归档为 `qa-gates-codex/P4-T4-IG-FAIL_20260318_ENV-SQLITE_codex.mp4`。
+
+actual_result:
+- bannerText: `VALIDATION_ERRORcommit content is required before pressing Enter`
+- topExcerpt: `recovered reorder note`
+- firstTimeline: `recovered reorder note`
+
+conclusion: PASS

@@ -7,7 +7,7 @@ import { RememberShell } from "../src/ui/RememberShell";
 function buildShell(overrides?: Partial<ShellState>): ShellState {
   return {
     appTitle: "Remember",
-    subtitle: "Phase 4 Task 3 - Keyboard-First Interaction",
+    subtitle: "Phase 4 Task 4 - Submit and Reorder",
     layers: {
       adapter: "ready",
       application: "ready",

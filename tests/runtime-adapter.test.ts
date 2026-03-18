@@ -13,6 +13,14 @@ import {
   readMockTimeline,
 } from "../src/adapter/runtime-adapter";
 
+let nextMockSession = 0;
+
+function withMockSession(search: string): string {
+  nextMockSession += 1;
+  const separator = search.includes("?") ? "&" : "?";
+  return `${search}${separator}mock_session=test-${nextMockSession}`;
+}
+
 describe("runtime-adapter mock parser", () => {
   it("keeps valid runtime mode without fallback", () => {
     const status = parseMockRuntimeStatus("?runtime_mode=dual_sync");
@@ -75,7 +83,7 @@ describe("runtime-adapter native title parser", () => {
 
 describe("runtime-adapter command envelope probe", () => {
   it("returns success envelope in mock mode by default", () => {
-    const probe = readMockCommandProbe("?runtime_mode=dual_sync");
+    const probe = readMockCommandProbe(withMockSession("?runtime_mode=dual_sync"));
 
     expect(probe.path).toBe("series.create");
     expect(probe.source).toBe("mock");
@@ -91,15 +99,19 @@ describe("runtime-adapter command envelope probe", () => {
     });
     expect(probe.envelope.data).toMatchObject({
       series: {
-        id: "stub-series-inbox",
         name: "Inbox",
         status: "active",
       },
     });
+    expect((probe.envelope.data as { series: { id: string } }).series.id).toMatch(
+      /^stub-series-inbox/,
+    );
   });
 
   it("returns DTO fields for series.list", () => {
-    const probe = readMockCommandProbe("?runtime_mode=sqlite_only&rpc_path=series.list");
+    const probe = readMockCommandProbe(
+      withMockSession("?runtime_mode=sqlite_only&rpc_path=series.list"),
+    );
 
     expect(probe.envelope.ok).toBe(true);
     expect(probe.envelope.data).toMatchObject({
@@ -121,25 +133,31 @@ describe("runtime-adapter command envelope probe", () => {
   });
 
   it("returns DTO fields for commit.append", () => {
-    const probe = readMockCommandProbe("?runtime_mode=sqlite_only&rpc_path=commit.append");
+    const probe = readMockCommandProbe(
+      withMockSession("?runtime_mode=sqlite_only&rpc_path=commit.append"),
+    );
 
     expect(probe.envelope.ok).toBe(true);
     expect(probe.envelope.data).toMatchObject({
       commit: {
-        id: "stub-commit-001",
         seriesId: "series-inbox",
         content: "first-note",
       },
       series: {
         id: "series-inbox",
-        name: "Stub Series",
+        name: "Inbox",
         status: "active",
       },
     });
+    expect((probe.envelope.data as { commit: { id: string } }).commit.id).toMatch(
+      /^stub-commit-/,
+    );
   });
 
   it("returns DTO fields for timeline.list", () => {
-    const probe = readMockCommandProbe("?runtime_mode=sqlite_only&rpc_path=timeline.list");
+    const probe = readMockCommandProbe(
+      withMockSession("?runtime_mode=sqlite_only&rpc_path=timeline.list"),
+    );
 
     expect(probe.envelope.ok).toBe(true);
     expect(probe.envelope.data).toMatchObject({
@@ -157,28 +175,34 @@ describe("runtime-adapter command envelope probe", () => {
   });
 
   it("returns validation error when rpc_fail is enabled", () => {
-    const probe = readMockCommandProbe("?runtime_mode=sqlite_only&rpc_fail=1");
+    const probe = readMockCommandProbe(withMockSession("?runtime_mode=sqlite_only&rpc_fail=1"));
 
     expect(probe.envelope.ok).toBe(false);
     expect(probe.envelope.error?.code).toBe("VALIDATION_ERROR");
   });
 
   it("returns pg timeout error when rpc_error is pg_timeout", () => {
-    const probe = readMockCommandProbe("?runtime_mode=dual_sync&rpc_error=pg_timeout");
+    const probe = readMockCommandProbe(
+      withMockSession("?runtime_mode=dual_sync&rpc_error=pg_timeout"),
+    );
 
     expect(probe.envelope.ok).toBe(false);
     expect(probe.envelope.error?.code).toBe("PG_TIMEOUT");
   });
 
   it("returns dual write failed error when rpc_error is dual_write_failed", () => {
-    const probe = readMockCommandProbe("?runtime_mode=dual_sync&rpc_error=dual_write_failed");
+    const probe = readMockCommandProbe(
+      withMockSession("?runtime_mode=dual_sync&rpc_error=dual_write_failed"),
+    );
 
     expect(probe.envelope.ok).toBe(false);
     expect(probe.envelope.error?.code).toBe("DUAL_WRITE_FAILED");
   });
 
   it("returns unknown command error for unsupported path", () => {
-    const probe = readMockCommandProbe("?runtime_mode=sqlite_only&rpc_path=series.unknown");
+    const probe = readMockCommandProbe(
+      withMockSession("?runtime_mode=sqlite_only&rpc_path=series.unknown"),
+    );
 
     expect(probe.envelope.ok).toBe(false);
     expect(probe.envelope.error?.code).toBe("UNKNOWN_COMMAND");
@@ -186,7 +210,9 @@ describe("runtime-adapter command envelope probe", () => {
 
   it("parses startup self-heal summary from query parameters", () => {
     const probe = readMockCommandProbe(
-      "?runtime_mode=dual_sync&startup_self_heal_scanned=4&startup_self_heal_repaired=3&startup_self_heal_unresolved=1&startup_self_heal_failed=1&startup_self_heal_message=alert-a&startup_self_heal_messages=alert-b;alert-c",
+      withMockSession(
+        "?runtime_mode=dual_sync&startup_self_heal_scanned=4&startup_self_heal_repaired=3&startup_self_heal_unresolved=1&startup_self_heal_failed=1&startup_self_heal_message=alert-a&startup_self_heal_messages=alert-b;alert-c",
+      ),
     );
 
     expect(probe.envelope.meta.startupSelfHeal).toMatchObject({
@@ -201,25 +227,28 @@ describe("runtime-adapter command envelope probe", () => {
 
 describe("runtime-adapter typed helpers", () => {
   it("returns create series data in mock mode", () => {
-    const envelope = readMockCreateSeries("?runtime_mode=sqlite_only", "Inbox");
+    const envelope = readMockCreateSeries(withMockSession("?runtime_mode=sqlite_only"), "Inbox");
 
     expect(envelope.ok).toBe(true);
-    expect(envelope.data?.series).toMatchObject({
-      id: "stub-series-inbox",
-      name: "Inbox",
-      status: "active",
-    });
+    expect(envelope.data?.series).toMatchObject({ name: "Inbox", status: "active" });
+    expect(envelope.data?.series.id).toMatch(/^stub-series-inbox/);
   });
 
   it("returns validation error for create series when mock fail flag is enabled", () => {
-    const envelope = readMockCreateSeries("?runtime_mode=sqlite_only&rpc_fail=1", "Inbox");
+    const envelope = readMockCreateSeries(
+      withMockSession("?runtime_mode=sqlite_only&rpc_fail=1"),
+      "Inbox",
+    );
 
     expect(envelope.ok).toBe(false);
     expect(envelope.error?.code).toBe("VALIDATION_ERROR");
   });
 
   it("returns series list data in mock mode", () => {
-    const envelope = readMockSeriesList("?runtime_mode=sqlite_only", buildDefaultSeriesListRequest());
+    const envelope = readMockSeriesList(
+      withMockSession("?runtime_mode=sqlite_only"),
+      buildDefaultSeriesListRequest(),
+    );
 
     expect(envelope.ok).toBe(true);
     expect(envelope.data?.items).toHaveLength(2);
@@ -228,7 +257,7 @@ describe("runtime-adapter typed helpers", () => {
 
   it("returns validation error for series list when mock fail flag is enabled", () => {
     const envelope = readMockSeriesList(
-      "?runtime_mode=sqlite_only&rpc_fail=1",
+      withMockSession("?runtime_mode=sqlite_only&rpc_fail=1"),
       buildDefaultSeriesListRequest(),
     );
 
@@ -238,7 +267,7 @@ describe("runtime-adapter typed helpers", () => {
 
   it("returns commit append data in mock mode", () => {
     const envelope = readMockAppendCommit(
-      "?runtime_mode=sqlite_only",
+      withMockSession("?runtime_mode=sqlite_only"),
       "series-inbox",
       "follow-up-note",
       "2026-03-16T00:00:00Z",
@@ -247,30 +276,35 @@ describe("runtime-adapter typed helpers", () => {
     expect(envelope.ok).toBe(true);
     expect(envelope.data).toMatchObject({
       commit: {
-        id: "stub-commit-001",
         seriesId: "series-inbox",
         content: "follow-up-note",
+        createdAt: "2026-03-16T00:00:00Z",
       },
       series: {
         id: "series-inbox",
         status: "active",
+        latestExcerpt: "follow-up-note",
       },
     });
+    expect(envelope.data?.commit.id).toMatch(/^stub-commit-/);
   });
 
   it("returns archive data in mock mode", () => {
-    const envelope = readMockArchiveSeries("?runtime_mode=sqlite_only", "series-project-a");
+    const envelope = readMockArchiveSeries(
+      withMockSession("?runtime_mode=sqlite_only"),
+      "series-project-a",
+    );
 
     expect(envelope.ok).toBe(true);
     expect(envelope.data).toMatchObject({
       seriesId: "series-project-a",
-      archivedAt: "2026-03-16T00:00:00Z",
+      archivedAt: "2026-03-16T12:00:00Z",
     });
   });
 
   it("returns forced error for archive helper", () => {
     const envelope = readMockArchiveSeries(
-      "?runtime_mode=dual_sync&rpc_error=dual_write_failed",
+      withMockSession("?runtime_mode=dual_sync&rpc_error=dual_write_failed"),
       "series-project-a",
     );
 
@@ -280,7 +314,7 @@ describe("runtime-adapter typed helpers", () => {
 
   it("returns forced error for timeline helper", () => {
     const envelope = readMockTimeline(
-      "?runtime_mode=dual_sync&rpc_error=dual_write_failed",
+      withMockSession("?runtime_mode=dual_sync&rpc_error=dual_write_failed"),
       "series-inbox",
       buildDefaultTimelineRequest(),
     );
@@ -291,7 +325,7 @@ describe("runtime-adapter typed helpers", () => {
 
   it("returns timeline items for the requested series", () => {
     const envelope = readMockTimeline(
-      "?runtime_mode=sqlite_only",
+      withMockSession("?runtime_mode=sqlite_only"),
       "series-project-a",
       buildDefaultTimelineRequest(),
     );
@@ -308,5 +342,105 @@ describe("runtime-adapter typed helpers", () => {
         content: "first-project-note",
       },
     ]);
+  });
+
+  it("keeps created series and latest commit excerpt in the same mock session", () => {
+    const search = withMockSession("?runtime_mode=sqlite_only");
+    const created = readMockCreateSeries(search, "Roadmap");
+    const createdSeriesId = created.data?.series.id;
+
+    expect(created.ok).toBe(true);
+    expect(createdSeriesId).toBeTruthy();
+
+    const appended = readMockAppendCommit(
+      search,
+      createdSeriesId ?? "",
+      "roadmap follow-up note",
+      "2026-03-18T02:00:00+08:00",
+    );
+    const listed = readMockSeriesList(search, buildDefaultSeriesListRequest());
+
+    expect(appended.ok).toBe(true);
+    expect(appended.data?.series.lastUpdatedAt).toBe("2026-03-17T18:00:00Z");
+    expect(listed.data?.items[0]).toMatchObject({
+      id: createdSeriesId,
+      latestExcerpt: "roadmap follow-up note",
+      lastUpdatedAt: "2026-03-17T18:00:00Z",
+    });
+  });
+
+  it("reorders series by the most recent append in the same mock session", () => {
+    const search = withMockSession("?runtime_mode=sqlite_only");
+
+    const firstAppend = readMockAppendCommit(
+      search,
+      "series-project-a",
+      "project-a now leads",
+      "2026-03-18T01:00:00Z",
+    );
+    const afterFirst = readMockSeriesList(search, buildDefaultSeriesListRequest());
+    const secondAppend = readMockAppendCommit(
+      search,
+      "series-inbox",
+      "inbox reclaims top",
+      "2026-03-18T02:00:00Z",
+    );
+    const afterSecond = readMockSeriesList(search, buildDefaultSeriesListRequest());
+
+    expect(firstAppend.ok).toBe(true);
+    expect(secondAppend.ok).toBe(true);
+    expect(afterFirst.data?.items[0]?.id).toBe("series-project-a");
+    expect(afterSecond.data?.items[0]).toMatchObject({
+      id: "series-inbox",
+      latestExcerpt: "inbox reclaims top",
+      lastUpdatedAt: "2026-03-18T02:00:00Z",
+    });
+  });
+
+  it("shows newly appended commits in timeline reads for the same mock session", () => {
+    const search = withMockSession("?runtime_mode=sqlite_only");
+
+    const appended = readMockAppendCommit(
+      search,
+      "series-project-a",
+      "timeline verification note",
+      "2026-03-18T03:00:00Z",
+    );
+    const timeline = readMockTimeline(search, "series-project-a", buildDefaultTimelineRequest());
+
+    expect(appended.ok).toBe(true);
+    expect(timeline.ok).toBe(true);
+    expect(timeline.data?.items[0]).toMatchObject({
+      content: "timeline verification note",
+      createdAt: "2026-03-18T03:00:00Z",
+    });
+  });
+
+  it("does not mutate the mock store when append validation fails", () => {
+    const search = withMockSession("?runtime_mode=sqlite_only");
+    const before = readMockSeriesList(search, buildDefaultSeriesListRequest());
+    const failed = readMockAppendCommit(search, "series-inbox", "", "2026-03-18T04:00:00Z");
+    const after = readMockSeriesList(search, buildDefaultSeriesListRequest());
+
+    expect(failed.ok).toBe(false);
+    expect(failed.error?.code).toBe("VALIDATION_ERROR");
+    expect(after.data?.items).toEqual(before.data?.items);
+  });
+
+  it("does not mutate the mock store when append is force-failed", () => {
+    const search = withMockSession("?runtime_mode=dual_sync");
+    const failedSearch = `${search}&rpc_error=dual_write_failed`;
+    const before = readMockSeriesList(search, buildDefaultSeriesListRequest());
+    const failed = readMockAppendCommit(
+      failedSearch,
+      "series-project-a",
+      "should not persist",
+      "2026-03-18T05:00:00Z",
+    );
+    const after = readMockSeriesList(search, buildDefaultSeriesListRequest());
+
+    expect(failed.ok).toBe(false);
+    expect(failed.error?.code).toBe("DUAL_WRITE_FAILED");
+    expect(after.data?.items).toEqual(before.data?.items);
   });
 });

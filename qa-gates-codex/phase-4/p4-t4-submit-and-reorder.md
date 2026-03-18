@@ -117,3 +117,15 @@ $env:PW_BROWSER = 'msedge'
 - source gate: `qa-gates/phase-4/p4-t4-submit-and-reorder.md`
 - DEV.md 映射: 提交后排序刷新
 - ROADMAP.md 映射: Phase 4 / 子任务 4
+
+## 2026-03-18 执行结果
+| case_id | result | evidence |
+|---|---|---|
+| `P4-T4-VG-PASS` | PASS | `qa-gates-codex/P4-T4-VG-PASS_20260318_ENV-SQLITE_codex.png` + `qa-gates-codex/P4-T4-VG-PASS_20260318_ENV-SQLITE_codex.txt` |
+| `P4-T4-VG-FAIL` | PASS | `qa-gates-codex/P4-T4-VG-FAIL_20260318_ENV-SQLITE_codex.png` + `qa-gates-codex/P4-T4-VG-FAIL_20260318_ENV-SQLITE_codex.txt` |
+| `P4-T4-IG-PASS` | PASS | `qa-gates-codex/P4-T4-IG-PASS_20260318_ENV-SQLITE_codex.mp4` + `qa-gates-codex/P4-T4-IG-PASS_20260318_ENV-SQLITE_codex.txt` |
+| `P4-T4-IG-FAIL` | PASS | `qa-gates-codex/P4-T4-IG-FAIL_20260318_ENV-SQLITE_codex.mp4` + `qa-gates-codex/P4-T4-IG-FAIL_20260318_ENV-SQLITE_codex.txt` |
+
+- target_mode: `web_url`
+- overall: `PASS`
+- note: stateful mock session preserved the same list/timeline state across keyboard submit, refresh, and retry paths, so the web gate could directly verify reorder + excerpt updates without a native bridge fallback.
