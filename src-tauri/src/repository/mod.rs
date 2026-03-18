@@ -365,21 +365,23 @@ pub(crate) fn maybe_inject_test_failure(
         return Ok(());
     }
 
-    let mut parts = trimmed.splitn(3, '|');
-    let Some(expected_backend) = parts.next() else {
-        return Ok(());
-    };
-    let Some(expected_operation) = parts.next() else {
-        return Ok(());
-    };
-    let Some(expected_key) = parts.next() else {
-        return Ok(());
-    };
+    for rule in trimmed.split(';').map(str::trim).filter(|rule| !rule.is_empty()) {
+        let mut parts = rule.splitn(3, '|');
+        let Some(expected_backend) = parts.next() else {
+            continue;
+        };
+        let Some(expected_operation) = parts.next() else {
+            continue;
+        };
+        let Some(expected_key) = parts.next() else {
+            continue;
+        };
 
-    if expected_backend == backend && expected_operation == operation && expected_key == key {
-        return Err(RepositoryError::storage(format!(
-            "injected {backend} failure for {operation} on key `{key}`"
-        )));
+        if expected_backend == backend && expected_operation == operation && expected_key == key {
+            return Err(RepositoryError::storage(format!(
+                "injected {backend} failure for {operation} on key `{key}`"
+            )));
+        }
     }
 
     Ok(())

@@ -1,3 +1,4 @@
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use sqlx::{postgres::PgPoolOptions, sqlite::SqlitePoolOptions};
@@ -20,6 +21,7 @@ struct SeriesState {
 
 #[tokio::test]
 async fn p3_t5_startup_self_heal_repairs_unresolved_dual_sync_alerts() {
+    let _test_guard = p3_t5_test_lock().lock().await;
     let postgres_dsn = match std::env::var("REMEMBER_TEST_POSTGRES_DSN") {
         Ok(value) if !value.trim().is_empty() => value,
         _ => {
@@ -49,9 +51,11 @@ async fn p3_t5_startup_self_heal_repairs_unresolved_dual_sync_alerts() {
         .expect("failed to run postgres migrations for p3-t5");
 
     let prefix = format!("p3t5-{}", nonce());
+    cleanup_all_p3_t5_postgres_artifacts(&postgres_pool).await;
     cleanup_postgres_prefix(&postgres_pool, &prefix).await;
 
-    let repository = repository::DualSyncRepository::new(sqlite_pool.clone(), postgres_pool.clone());
+    let repository =
+        repository::DualSyncRepository::new(sqlite_pool.clone(), postgres_pool.clone());
 
     let create_series_id = format!("{prefix}-create-series");
     let create_alert_reason = format!("series_id={create_series_id}");
@@ -146,15 +150,10 @@ async fn p3_t5_startup_self_heal_repairs_unresolved_dual_sync_alerts() {
         .expect("archive series create should succeed");
     let archive_before = load_series_state_sqlite(&sqlite_pool, &archive_series_id).await;
     let archive_alert_reason = format!("series_id={archive_series_id}");
-    set_failure_injection("sqlite", "restore_series_snapshot", &archive_series_id);
-    let mut archive_lock_tx = postgres_pool
-        .begin()
-        .await
-        .expect("failed to begin postgres lock tx for archive_series");
-    sqlx::query("LOCK TABLE series IN ACCESS EXCLUSIVE MODE")
-        .execute(&mut *archive_lock_tx)
-        .await
-        .expect("failed to lock postgres series table for archive_series");
+    set_failure_injections(&[
+        ("sqlite", "restore_series_snapshot", &archive_series_id),
+        ("postgres", "archive_series", &archive_series_id),
+    ]);
     let archive_error = repository
         .archive_series(ArchiveSeriesInput {
             series_id: archive_series_id.clone(),
@@ -163,13 +162,15 @@ async fn p3_t5_startup_self_heal_repairs_unresolved_dual_sync_alerts() {
         .await
         .expect_err("archive_series should fail when rollback compensation is injected");
     clear_failure_injection();
-    archive_lock_tx
-        .rollback()
-        .await
-        .expect("failed to rollback archive_series lock tx");
     assert!(matches!(archive_error, RepositoryError::DualWriteFailed(_)));
-    assert_series_statuses(&sqlite_pool, &postgres_pool, &archive_series_id, "archived", "active")
-        .await;
+    assert_series_statuses(
+        &sqlite_pool,
+        &postgres_pool,
+        &archive_series_id,
+        "archived",
+        "active",
+    )
+    .await;
     assert_unresolved_alert(
         &sqlite_pool,
         &postgres_pool,
@@ -191,9 +192,8 @@ async fn p3_t5_startup_self_heal_repairs_unresolved_dual_sync_alerts() {
     let silent_before = load_series_state_sqlite(&sqlite_pool, &silent_series_id).await;
     let threshold_before = "2099-05-01T00:00:00Z".to_string();
     let mark_silent_batch_id = format!("mark_silent:{threshold_before}:{silent_series_id}");
-    let mark_silent_alert_reason = format!(
-        "threshold_before={threshold_before}, affected_series_ids={silent_series_id}"
-    );
+    let mark_silent_alert_reason =
+        format!("threshold_before={threshold_before}, affected_series_ids={silent_series_id}");
     set_failure_injection("sqlite", "rollback_mark_silent_series", &silent_series_id);
     let mut mark_silent_lock_tx = postgres_pool
         .begin()
@@ -214,9 +214,18 @@ async fn p3_t5_startup_self_heal_repairs_unresolved_dual_sync_alerts() {
         .rollback()
         .await
         .expect("failed to rollback mark_silent_series lock tx");
-    assert!(matches!(mark_silent_error, RepositoryError::DualWriteFailed(_)));
-    assert_series_statuses(&sqlite_pool, &postgres_pool, &silent_series_id, "silent", "active")
-        .await;
+    assert!(matches!(
+        mark_silent_error,
+        RepositoryError::DualWriteFailed(_)
+    ));
+    assert_series_statuses(
+        &sqlite_pool,
+        &postgres_pool,
+        &silent_series_id,
+        "silent",
+        "active",
+    )
+    .await;
     assert_unresolved_alert(
         &sqlite_pool,
         &postgres_pool,
@@ -270,6 +279,7 @@ async fn p3_t5_startup_self_heal_repairs_unresolved_dual_sync_alerts() {
 
 #[tokio::test]
 async fn p3_t5_startup_self_heal_closes_alerts_when_target_state_is_already_consistent() {
+    let _test_guard = p3_t5_test_lock().lock().await;
     let postgres_dsn = match std::env::var("REMEMBER_TEST_POSTGRES_DSN") {
         Ok(value) if !value.trim().is_empty() => value,
         _ => {
@@ -299,6 +309,7 @@ async fn p3_t5_startup_self_heal_closes_alerts_when_target_state_is_already_cons
         .expect("failed to run postgres migrations for idempotent p3-t5");
 
     let prefix = format!("p3t5-idempotent-{}", nonce());
+    cleanup_all_p3_t5_postgres_artifacts(&postgres_pool).await;
     cleanup_postgres_prefix(&postgres_pool, &prefix).await;
 
     let alert_id = format!("{prefix}-alert");
@@ -306,10 +317,18 @@ async fn p3_t5_startup_self_heal_closes_alerts_when_target_state_is_already_cons
     let reason = format!(
         "dual_sync create_series single-side success; succeeded_side=sqlite; failed_side=postgres; operation_error=simulated; detail=series_id={series_id}"
     );
-    insert_unresolved_alert(&sqlite_pool, &postgres_pool, &alert_id, "create_series", &series_id, &reason)
-        .await;
+    insert_unresolved_alert(
+        &sqlite_pool,
+        &postgres_pool,
+        &alert_id,
+        "create_series",
+        &series_id,
+        &reason,
+    )
+    .await;
 
-    let repository = repository::DualSyncRepository::new(sqlite_pool.clone(), postgres_pool.clone());
+    let repository =
+        repository::DualSyncRepository::new(sqlite_pool.clone(), postgres_pool.clone());
     let summary = repository.run_startup_self_heal().await;
 
     assert_eq!(summary.scanned_alerts, 1);
@@ -326,6 +345,15 @@ fn set_failure_injection(backend: &str, operation: &str, key: &str) {
         TEST_FAILURE_INJECTION_ENV,
         format!("{backend}|{operation}|{key}"),
     );
+}
+
+fn set_failure_injections(rules: &[(&str, &str, &str)]) {
+    let raw = rules
+        .iter()
+        .map(|(backend, operation, key)| format!("{backend}|{operation}|{key}"))
+        .collect::<Vec<_>>()
+        .join(";");
+    std::env::set_var(TEST_FAILURE_INJECTION_ENV, raw);
 }
 
 fn clear_failure_injection() {
@@ -437,7 +465,10 @@ async fn assert_no_unresolved_alerts(
     .expect("failed to query postgres unresolved alert count");
 
     assert_eq!(sqlite_count, 0, "sqlite unresolved alerts should be closed");
-    assert_eq!(postgres_count, 0, "postgres unresolved alerts should be closed");
+    assert_eq!(
+        postgres_count, 0,
+        "postgres unresolved alerts should be closed"
+    );
 }
 
 async fn assert_series_present_only_in_sqlite(
@@ -542,10 +573,7 @@ async fn assert_series_statuses(
     assert_eq!(postgres_value, postgres_status, "postgres status mismatch");
 }
 
-async fn load_series_state_sqlite(
-    sqlite_pool: &sqlx::SqlitePool,
-    series_id: &str,
-) -> SeriesState {
+async fn load_series_state_sqlite(sqlite_pool: &sqlx::SqlitePool, series_id: &str) -> SeriesState {
     let row: (String, String, String, Option<String>) = sqlx::query_as(
         "SELECT status, latest_excerpt, last_updated_at, archived_at
          FROM series
@@ -564,10 +592,7 @@ async fn load_series_state_sqlite(
     }
 }
 
-async fn load_series_state_postgres(
-    postgres_pool: &sqlx::PgPool,
-    series_id: &str,
-) -> SeriesState {
+async fn load_series_state_postgres(postgres_pool: &sqlx::PgPool, series_id: &str) -> SeriesState {
     let row: (String, String, String, Option<String>) = sqlx::query_as(
         "SELECT
             status,
@@ -602,8 +627,14 @@ async fn assert_series_state_matches(
     let sqlite_state = load_series_state_sqlite(sqlite_pool, series_id).await;
     let postgres_state = load_series_state_postgres(postgres_pool, series_id).await;
 
-    assert_eq!(&sqlite_state, expected, "sqlite state should match expected");
-    assert_eq!(&postgres_state, expected, "postgres state should match expected");
+    assert_eq!(
+        &sqlite_state, expected,
+        "sqlite state should match expected"
+    );
+    assert_eq!(
+        &postgres_state, expected,
+        "postgres state should match expected"
+    );
 }
 
 async fn cleanup_postgres_prefix(pool: &sqlx::PgPool, prefix: &str) {
@@ -634,4 +665,14 @@ fn nonce() -> u128 {
         .duration_since(UNIX_EPOCH)
         .expect("clock went backwards")
         .as_nanos()
+}
+
+fn p3_t5_test_lock() -> &'static tokio::sync::Mutex<()> {
+    static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+}
+
+async fn cleanup_all_p3_t5_postgres_artifacts(pool: &sqlx::PgPool) {
+    cleanup_postgres_prefix(pool, "p3t5-").await;
+    cleanup_postgres_prefix(pool, "p3t5-idempotent-").await;
 }
