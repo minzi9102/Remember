@@ -345,41 +345,104 @@ function Send-Text {
 function Start-ScreenRecording {
   param(
     [string]$Path,
-    [int]$Seconds = 28
+    [int]$Seconds = 28,
+    [int]$FrameIntervalMs = 1000
   )
 
   if (Test-Path $Path) {
     Remove-Item $Path -Force
   }
 
-  Start-Process `
-    -FilePath $ffmpegExe `
+  $framesDir = Join-Path $env:TEMP ("p5t1-frames-" + [guid]::NewGuid().ToString())
+  $workerScript = Join-Path $env:TEMP ("p5t1-record-worker-" + [guid]::NewGuid().ToString() + ".ps1")
+  $frameCount = [Math]::Max(3, [int][Math]::Ceiling(($Seconds * 1000) / $FrameIntervalMs))
+  New-Dir -Path $framesDir
+
+  $workerCode = @"
+param(
+  [string]`$FramesDir,
+  [int]`$FrameCount,
+  [int]`$SleepMs,
+  [string]`$ShotScript
+)
+
+for (`$index = 0; `$index -lt `$FrameCount; `$index++) {
+  `$framePath = Join-Path `$FramesDir ("frame-{0:D4}.png" -f `$index)
+  try {
+    powershell -ExecutionPolicy Bypass -File `$ShotScript -Path `$framePath -ActiveWindow | Out-Null
+  } catch {
+  }
+
+  Start-Sleep -Milliseconds `$SleepMs
+}
+"@
+  Set-Content -Path $workerScript -Value $workerCode
+
+  $process = Start-Process `
+    -FilePath "powershell.exe" `
     -ArgumentList @(
-      "-y",
-      "-f", "gdigrab",
-      "-framerate", "10",
-      "-i", "desktop",
-      "-t", "$Seconds",
-      "-c:v", "libx264",
-      "-preset", "ultrafast",
-      "-pix_fmt", "yuv420p",
-      $Path
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", $workerScript,
+      "-FramesDir", $framesDir,
+      "-FrameCount", "$frameCount",
+      "-SleepMs", "$FrameIntervalMs",
+      "-ShotScript", $screenshotScript
     ) `
     -PassThru `
     -WindowStyle Hidden
+
+  return [pscustomobject]@{
+    Process = $process
+    FramesDir = $framesDir
+    WorkerScript = $workerScript
+    OutputPath = $Path
+    FrameRate = [Math]::Round(1000 / $FrameIntervalMs, 2)
+  }
 }
 
 function Wait-ScreenRecording {
-  param([System.Diagnostics.Process]$Process)
+  param($Recording)
 
-  if ($null -eq $Process) {
+  if ($null -eq $Recording) {
     return
   }
 
   try {
-    Wait-Process -Id $Process.Id -Timeout 10
+    if ($Recording.Process) {
+      Wait-Process -Id $Recording.Process.Id -Timeout 15
+    }
   } catch {
-    Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+    if ($Recording.Process) {
+      Stop-Process -Id $Recording.Process.Id -Force -ErrorAction SilentlyContinue
+    }
+  }
+
+  try {
+    $framePattern = Join-Path $Recording.FramesDir "frame-%04d.png"
+    $frames = Get-ChildItem -Path $Recording.FramesDir -Filter "frame-*.png" -ErrorAction SilentlyContinue |
+      Sort-Object Name
+    if (-not $frames) {
+      throw "screen recording fallback captured no frames"
+    }
+
+    & $ffmpegExe `
+      -y `
+      -framerate "$($Recording.FrameRate)" `
+      -i $framePattern `
+      -c:v "libx264" `
+      -pix_fmt "yuv420p" `
+      $Recording.OutputPath | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      throw "failed to encode fallback screen recording (exit code $LASTEXITCODE)"
+    }
+  } finally {
+    if (Test-Path $Recording.WorkerScript) {
+      Remove-Item $Recording.WorkerScript -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path $Recording.FramesDir) {
+      Remove-Item $Recording.FramesDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
   }
 }
 
@@ -686,7 +749,16 @@ function Run-IGPassCase {
     $blockedReason = $_.Exception.Message
     Take-ActiveWindowShot -Path $pngPath
   } finally {
-    Wait-ScreenRecording -Process $recording
+    try {
+      Wait-ScreenRecording -Recording $recording
+    } catch {
+      $result = "BLOCKED"
+      if ([string]::IsNullOrWhiteSpace($blockedReason)) {
+        $blockedReason = $_.Exception.Message
+      } else {
+        $blockedReason = "$blockedReason | $($_.Exception.Message)"
+      }
+    }
   }
 
   Append-Text -TxtPath $txtPath -Line ""
@@ -764,7 +836,16 @@ function Run-IGFailCase {
     $blockedReason = $_.Exception.Message
     Take-ActiveWindowShot -Path $pngPath
   } finally {
-    Wait-ScreenRecording -Process $recording
+    try {
+      Wait-ScreenRecording -Recording $recording
+    } catch {
+      $result = "BLOCKED"
+      if ([string]::IsNullOrWhiteSpace($blockedReason)) {
+        $blockedReason = $_.Exception.Message
+      } else {
+        $blockedReason = "$blockedReason | $($_.Exception.Message)"
+      }
+    }
   }
 
   Append-Text -TxtPath $txtPath -Line ""
