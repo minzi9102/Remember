@@ -2,6 +2,7 @@ param(
   [ValidateSet("ENV-SQLITE")]
   [string]$EnvId = "ENV-SQLITE",
   [string]$WebDriverUrl = "http://127.0.0.1:4723",
+  [switch]$SkipStatusProbe,
   [string[]]$Cases = @(
     "P4-T1-VG-PASS",
     "P4-T1-IG-PASS",
@@ -85,6 +86,17 @@ $wdKeys = @{
   Alt = [string][char]0xE00A
   Escape = [string][char]0xE00C
 }
+$script:WebDriverHealth = [pscustomobject]@{
+  Reachable = $false
+  StatusEndpointOk = $false
+  RootSessionOk = $false
+  AttachWindowOk = $false
+  HealthMode = "not-run"
+  StatusEndpointResult = "not-run"
+  RootSessionProbeResult = "not-run"
+  AttachWindowProbeResult = "not-run"
+  FailureReason = "not-run"
+}
 $global:ViteProcess = $null
 
 function New-Dir {
@@ -121,6 +133,9 @@ function Write-CaseHeader {
     "runtime_mode: $runtimeMode",
     "run_date: $runDate",
     "tester: $tester",
+    "webdriver_health_mode: $($script:WebDriverHealth.HealthMode)",
+    "webdriver_status_endpoint: $($script:WebDriverHealth.StatusEndpointResult)",
+    "webdriver_root_session_probe: $($script:WebDriverHealth.RootSessionProbeResult)",
     "structure: environment -> steps -> actual_result -> log_excerpt -> sqlite_proof -> conclusion"
   ) -Encoding ascii
 }
@@ -194,7 +209,10 @@ function Update-MatrixStatus {
 }
 
 function Write-BlockedArtifacts {
-  param([string]$Reason)
+  param(
+    [string]$Reason,
+    [string]$Phase = "precheck"
+  )
 
   foreach ($caseId in $selectedCases) {
     $txtPath = (Get-CaseEvidenceBase -CaseId $caseId) + ".txt"
@@ -203,8 +221,13 @@ function Write-BlockedArtifacts {
     Append-Text -TxtPath $txtPath -Line "environment:"
     Append-Text -TxtPath $txtPath -Line "- webdriver_url: $WebDriverUrl"
     Append-Text -TxtPath $txtPath -Line "- vite_url: $viteUrl"
+    Append-Text -TxtPath $txtPath -Line "- webdriver_health_mode: $($script:WebDriverHealth.HealthMode)"
+    Append-Text -TxtPath $txtPath -Line "- webdriver_status_endpoint: $($script:WebDriverHealth.StatusEndpointResult)"
+    Append-Text -TxtPath $txtPath -Line "- webdriver_root_session_probe: $($script:WebDriverHealth.RootSessionProbeResult)"
+    Append-Text -TxtPath $txtPath -Line "- webdriver_attach_window_probe: $($script:WebDriverHealth.AttachWindowProbeResult)"
     Append-Text -TxtPath $txtPath -Line ""
     Append-Text -TxtPath $txtPath -Line "actual_result:"
+    Append-Text -TxtPath $txtPath -Line "- blocked_phase: $Phase"
     Append-Text -TxtPath $txtPath -Line "- blocked_reason: $Reason"
     Append-Text -TxtPath $txtPath -Line "- visual_evidence: not produced because precheck blocked before case execution"
     Append-Text -TxtPath $txtPath -Line ""
@@ -637,13 +660,25 @@ function Assert-SqliteSeriesAndCommit {
   return $evidence
 }
 
-function Test-WebDriverServer {
+function Get-WebExceptionDetails {
+  param($ErrorRecord)
+
+  $message = $ErrorRecord.Exception.Message
   try {
-    $status = Invoke-RestMethod -Method Get -Uri ($WebDriverUrl.TrimEnd("/") + "/status") -TimeoutSec 3
-    return $null -ne $status
+    if ($ErrorRecord.Exception.Response) {
+      $stream = $ErrorRecord.Exception.Response.GetResponseStream()
+      if ($stream) {
+        $reader = New-Object System.IO.StreamReader($stream)
+        $body = $reader.ReadToEnd()
+        if (-not [string]::IsNullOrWhiteSpace($body)) {
+          return "$message | body: $body"
+        }
+      }
+    }
   } catch {
-    return $false
   }
+
+  return $message
 }
 
 function Invoke-WebDriverJson {
@@ -654,12 +689,16 @@ function Invoke-WebDriverJson {
   )
 
   $uri = $WebDriverUrl.TrimEnd("/") + $Path
-  if ($null -eq $Body) {
-    return Invoke-RestMethod -Method $Method -Uri $uri -TimeoutSec 10
-  }
+  try {
+    if ($null -eq $Body) {
+      return Invoke-RestMethod -Method $Method -Uri $uri -TimeoutSec 10
+    }
 
-  $json = $Body | ConvertTo-Json -Depth 12
-  return Invoke-RestMethod -Method $Method -Uri $uri -Body $json -ContentType "application/json; charset=utf-8" -TimeoutSec 15
+    $json = $Body | ConvertTo-Json -Depth 12
+    return Invoke-RestMethod -Method $Method -Uri $uri -Body $json -ContentType "application/json; charset=utf-8" -TimeoutSec 15
+  } catch {
+    throw "webdriver $Method $Path failed: $(Get-WebExceptionDetails -ErrorRecord $_)"
+  }
 }
 
 function Get-WebDriverSessionId {
@@ -731,6 +770,54 @@ function Stop-WebDriverSession {
     Invoke-WebDriverJson -Method Delete -Path "/session/$SessionId" | Out-Null
   } catch {
   }
+}
+
+function Get-WebDriverHealth {
+  $health = [ordered]@{
+    Reachable = $false
+    StatusEndpointOk = $false
+    RootSessionOk = $false
+    AttachWindowOk = $false
+    HealthMode = "failed"
+    StatusEndpointResult = if ($SkipStatusProbe) { "skipped" } else { "not-run" }
+    RootSessionProbeResult = "not-run"
+    AttachWindowProbeResult = "not-run"
+    FailureReason = ""
+  }
+
+  if (-not $SkipStatusProbe) {
+    try {
+      $null = Invoke-RestMethod -Method Get -Uri ($WebDriverUrl.TrimEnd("/") + "/status") -TimeoutSec 3
+      $health.StatusEndpointOk = $true
+      $health.StatusEndpointResult = "ok"
+    } catch {
+      $health.StatusEndpointResult = "failed: $(Get-WebExceptionDetails -ErrorRecord $_)"
+    }
+  }
+
+  $probeSessionId = $null
+  try {
+    $probeSessionId = Start-RootSession
+    $health.RootSessionOk = $true
+    $health.RootSessionProbeResult = "ok"
+  } catch {
+    $health.RootSessionProbeResult = "failed: $($_.Exception.Message)"
+    $health.FailureReason = "webdriver root-session probe failed: $($_.Exception.Message)"
+  } finally {
+    Stop-WebDriverSession -SessionId $probeSessionId
+  }
+
+  if ($health.RootSessionOk) {
+    $health.Reachable = $true
+    $health.HealthMode = if ($health.StatusEndpointOk) { "status" } else { "root-session" }
+    if (-not $health.StatusEndpointOk) {
+      $health.FailureReason = "webdriver status failed, but root-session probe succeeded"
+    }
+  } elseif (-not $health.StatusEndpointOk -and [string]::IsNullOrWhiteSpace($health.FailureReason)) {
+    $health.FailureReason = "webdriver status failed and root-session probe did not recover the service"
+  }
+
+  return [pscustomobject]$health
 }
 
 function Invoke-WebDriverActions {
@@ -912,6 +999,51 @@ function Start-CaseAppWindow {
   }
 }
 
+function Test-AttachedWindowProbe {
+  param([System.Diagnostics.Process]$Process)
+
+  $probeSessionId = $null
+  try {
+    $probeSessionId = Start-AttachedWindowSession -WindowHandle $Process.MainWindowHandle
+    return [pscustomobject]@{
+      Ok = $true
+      FailureReason = ""
+    }
+  } catch {
+    return [pscustomobject]@{
+      Ok = $false
+      FailureReason = $_.Exception.Message
+    }
+  } finally {
+    Stop-WebDriverSession -SessionId $probeSessionId
+  }
+}
+
+function Invoke-AttachWindowProbe {
+  $probeApp = $null
+  $attachResult = $null
+
+  try {
+    Prepare-CleanEnvironment
+    $probeApp = Start-CaseAppWindow -CaseKey "p4t1-attach-probe" -AcceptedTitles @($appTitle)
+    $attachResult = Test-AttachedWindowProbe -Process $probeApp.Process
+
+    if ($attachResult.Ok) {
+      $script:WebDriverHealth.AttachWindowOk = $true
+      $script:WebDriverHealth.AttachWindowProbeResult = "ok"
+      return
+    }
+
+    $script:WebDriverHealth.AttachWindowOk = $false
+    $script:WebDriverHealth.AttachWindowProbeResult = "failed: $($attachResult.FailureReason)"
+    $script:WebDriverHealth.FailureReason = "attach-window probe failed: $($attachResult.FailureReason)"
+    throw "attach-window probe failed: $($attachResult.FailureReason)"
+  } finally {
+    if ($probeApp) { Stop-ProcessSafe -Process $probeApp.Process }
+    Stop-ViteServer
+  }
+}
+
 function Run-VGPassCase {
   $caseId = "P4-T1-VG-PASS"
   $txtPath = (Get-CaseEvidenceBase -CaseId $caseId) + ".txt"
@@ -976,7 +1108,8 @@ function Run-VGPassCase {
     Stop-ViteServer
   }
 
-  Set-CaseResult -CaseId $caseId -Result $result -Evidence ((if (Test-Path $pngPath) { "`$png + `$txt" } else { "`$txt" }))
+  $evidence = if (Test-Path $pngPath) { "`$png + `$txt" } else { "`$txt" }
+  Set-CaseResult -CaseId $caseId -Result $result -Evidence $evidence
 }
 
 function Run-IGPassCase {
@@ -1066,7 +1199,8 @@ function Run-IGPassCase {
     Stop-ViteServer
   }
 
-  Set-CaseResult -CaseId $caseId -Result $result -Evidence ((if (Test-Path $mp4Path) { "`$mp4 + `$txt" } else { "`$txt" }))
+  $evidence = if (Test-Path $mp4Path) { "`$mp4 + `$txt" } else { "`$txt" }
+  Set-CaseResult -CaseId $caseId -Result $result -Evidence $evidence
 }
 
 function Run-VGFailCase {
@@ -1160,7 +1294,8 @@ function Run-VGFailCase {
     Stop-ViteServer
   }
 
-  Set-CaseResult -CaseId $caseId -Result $result -Evidence ((if (Test-Path $pngPath) { "`$png + `$txt" } else { "`$txt" }))
+  $evidence = if (Test-Path $pngPath) { "`$png + `$txt" } else { "`$txt" }
+  Set-CaseResult -CaseId $caseId -Result $result -Evidence $evidence
 }
 
 function Run-IGFailCase {
@@ -1280,7 +1415,8 @@ function Run-IGFailCase {
     Stop-ViteServer
   }
 
-  Set-CaseResult -CaseId $caseId -Result $result -Evidence ((if (Test-Path $mp4Path) { "`$mp4 + `$txt" } else { "`$txt" }))
+  $evidence = if (Test-Path $mp4Path) { "`$mp4 + `$txt" } else { "`$txt" }
+  Set-CaseResult -CaseId $caseId -Result $result -Evidence $evidence
 }
 
 foreach ($caseId in $Cases) {
@@ -1314,27 +1450,41 @@ try {
   if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) {
     $precheckFailures.Add("npm.cmd not available")
   }
-  if (-not (Test-WebDriverServer)) {
-    $precheckFailures.Add("webdriver server unreachable at $WebDriverUrl/status")
-  }
 
   if ($precheckFailures.Count -gt 0) {
     $reason = $precheckFailures -join "; "
     Write-BlockedArtifacts -Reason $reason
     Update-MatrixStatus -Status "BLOCKED"
   } else {
-    foreach ($caseId in $selectedCases) {
-      switch ($caseId) {
-        "P4-T1-VG-PASS" { Run-VGPassCase }
-        "P4-T1-IG-PASS" { Run-IGPassCase }
-        "P4-T1-VG-FAIL" { Run-VGFailCase }
-        "P4-T1-IG-FAIL" { Run-IGFailCase }
+    $script:WebDriverHealth = Get-WebDriverHealth
+
+    if (-not $script:WebDriverHealth.RootSessionOk) {
+      Write-BlockedArtifacts -Reason $script:WebDriverHealth.FailureReason -Phase "root-session"
+      Update-MatrixStatus -Status "BLOCKED"
+    } else {
+      try {
+        Invoke-AttachWindowProbe
+      } catch {
+        Write-BlockedArtifacts -Reason $_.Exception.Message -Phase "attach-window"
+        Update-MatrixStatus -Status "BLOCKED"
+      }
+
+      if ($script:WebDriverHealth.AttachWindowOk) {
+        foreach ($caseId in $selectedCases) {
+          switch ($caseId) {
+            "P4-T1-VG-PASS" { Run-VGPassCase }
+            "P4-T1-IG-PASS" { Run-IGPassCase }
+            "P4-T1-VG-FAIL" { Run-VGFailCase }
+            "P4-T1-IG-FAIL" { Run-IGFailCase }
+          }
+        }
+        Update-MatrixStatus -Status (Get-OverallStatus)
       }
     }
-    Update-MatrixStatus -Status (Get-OverallStatus)
   }
 
   Write-Output ("overall={0}" -f (Get-OverallStatus))
+  Write-Output ("webdriver_health={0}" -f $script:WebDriverHealth.HealthMode)
   foreach ($entry in $caseResults.Values) {
     Write-Output ("{0} {1}" -f $entry.CaseId, $entry.Result)
   }
