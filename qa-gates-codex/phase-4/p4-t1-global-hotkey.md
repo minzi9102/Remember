@@ -8,8 +8,8 @@
 | 字段 | 值 |
 |---|---|
 | case_id | `P4-T1-VG-PASS` / `P4-T1-VG-FAIL` / `P4-T1-IG-PASS` / `P4-T1-IG-FAIL` |
-| skill_chain | `playwright`（默认） / `playwright + screenshot`（桌面回退） |
-| target_mode | `web_url`（默认） / `desktop_window`（回退） |
+| skill_chain | `webdriver + screenshot`（默认） / `playwright + screenshot`（回退） |
+| target_mode | `desktop_window`（默认） / `web_url`（回退） |
 | setup | 黑盒启动 + 环境校验 |
 | steps | Codex 命令级步骤 |
 | oracle | 可观察判定（UI/日志/查询） |
@@ -25,23 +25,28 @@ $env:RUN_DATE = (Get-Date -Format 'yyyyMMdd')
 $env:PW_BROWSER = 'msedge'
 ```
 
+## 2026-03-18 WebDriver 最小迁移决议
+- 本任务 4 条用例全部迁入 `WebDriver` 主路径。
+- 迁移原因：该任务验证对象是 `tauri-plugin-global-shortcut`，必须在真实 `desktop_window` 中证明热键呼出/隐藏，而不是仅在 `web_url` 中观察页面状态。
+- 执行策略：`WebDriver` 负责真实窗口激活、热键注入、可见性断言；`screenshot` 继续保留为桌面证据采集；`playwright` 仅作为环境受限时的回退链路。
+
 ## 视觉门禁
 ### P4-T1-VG-PASS
 - case_id: `P4-T1-VG-PASS`
-- skill_chain: `playwright`
-- target_mode: `web_url`
+- skill_chain: `webdriver + screenshot`
+- target_mode: `desktop_window`
 - setup:
-  1. 确认应用已启动并可访问 `$env:TARGET_URL`。
-  2. 准备会话 ID：`P4T1-VG-PASS`。
+  1. 确认 Tauri 桌面应用已启动，窗口标题匹配 `$env:APP_WINDOW`。
+  2. 准备 WebDriver 会话 ID：`P4T1-VG-PASS`。
 - steps:
-  1. `npx --yes --package @playwright/cli playwright-cli -s=P4T1-VG-PASS open $env:TARGET_URL --browser $env:PW_BROWSER`
-  2. `npx --yes --package @playwright/cli playwright-cli -s=P4T1-VG-PASS snapshot`
-  3. 根据当前子任务流程完成关键操作并截图（`screenshot`）。
-  4. 记录 `热键可见切换` 对应的可见结果。
-  5. `npx --yes --package @playwright/cli playwright-cli -s=P4T1-VG-PASS close`
+  1. 通过 `WebDriver` 连接 Tauri 驱动并定位主窗口。
+  2. 激活非应用窗口或桌面，建立“应用当前隐藏/失焦”的前置状态。
+  3. 发送全局热键并断言 `$env:APP_WINDOW` 被拉起且可见。
+  4. 使用 `screenshot` 记录呼出后的窗口可见状态。
+  5. 再次发送全局热键并断言窗口隐藏或回到后台。
 - oracle:
-  1. 关键界面元素完整显示，无错位/遮挡。
-  2. `热键可见切换` 对应成功态可见。
+  1. 热键在真实桌面环境下可从非应用焦点状态呼出主窗口。
+  2. 第二次热键触发后窗口状态按设计切回隐藏或后台。
 - evidence:
   - `P4-T1-VG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.png`
   - `P4-T1-VG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
@@ -51,18 +56,19 @@ $env:PW_BROWSER = 'msedge'
 
 ### P4-T1-VG-FAIL
 - case_id: `P4-T1-VG-FAIL`
-- skill_chain: `playwright + screenshot`
-- target_mode: `web_url` 或 `desktop_window`
+- skill_chain: `webdriver + screenshot`
+- target_mode: `desktop_window`
 - setup:
-  1. 制造反向条件（非法输入、模式冲突、依赖不可达）。
-  2. 若浏览器路径不可执行，切换 `desktop_window` + `screenshot`。
+  1. 制造反向条件（热键冲突、插件注册失败、窗口句柄不可用）。
+  2. 准备 WebDriver 会话并记录当前桌面焦点窗口。
 - steps:
-  1. 用与 PASS 相同流程触发反向路径。
-  2. 捕获错误提示/降级状态截图。
-  3. 使用 `take_screenshot.ps1 -Mode temp -ActiveWindow` 补充桌面证据（可选）。
+  1. 在反向条件下发送全局热键。
+  2. 断言窗口未发生错误呼出，或出现明确降级提示/日志。
+  3. 使用 `screenshot` 采集失败态与当前焦点窗口证据。
+  4. 清理反向条件后复跑一次 PASS 路径确认可恢复。
 - oracle:
-  1. 存在明确失败反馈，不能静默失败。
-  2. 失败后系统仍可继续操作。
+  1. 失败路径存在明确反馈，不能出现“热键无响应但无日志/提示”的静默失败。
+  2. 清理后热键能力可恢复。
 - evidence:
   - `P4-T1-VG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.png`
   - `P4-T1-VG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
@@ -73,19 +79,20 @@ $env:PW_BROWSER = 'msedge'
 ## 交互门禁
 ### P4-T1-IG-PASS
 - case_id: `P4-T1-IG-PASS`
-- skill_chain: `playwright`
-- target_mode: `web_url`
+- skill_chain: `webdriver + screenshot`
+- target_mode: `desktop_window`
 - setup:
-  1. 使用会话 ID：`P4T1-IG-PASS`。
-  2. 准备一条合法交互链路（输入、提交、切换或导航）。
+  1. 使用 WebDriver 会话 ID：`P4T1-IG-PASS`。
+  2. 准备“失焦 -> 热键呼出 -> 聚焦输入 -> 再次热键隐藏”的合法交互链路。
 - steps:
-  1. `open -> snapshot` 后执行合法交互链路。
-  2. 记录每一步操作与系统反馈。
-  3. 导出日志或查询结果作为交互佐证。
-  4. 关闭会话。
+  1. 通过 WebDriver 让应用处于后台或被其他窗口遮挡。
+  2. 发送全局热键，断言应用前置并可接收键盘焦点。
+  3. 在主窗口执行一段最小合法输入或导航，证明呼出的窗口可交互。
+  4. 再次发送全局热键，断言窗口隐藏后不会残留焦点异常。
+  5. 导出日志或窗口状态记录作为交互佐证。
 - oracle:
-  1. 交互链路完整，无卡死或不可恢复状态。
-  2. 结果可通过 UI + 日志/查询交叉验证。
+  1. 热键驱动的前后台切换与后续交互链路完整，无卡死或焦点丢失。
+  2. 结果可通过窗口状态 + 日志交叉验证。
 - evidence:
   - `P4-T1-IG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.mp4`
   - `P4-T1-IG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
@@ -95,17 +102,17 @@ $env:PW_BROWSER = 'msedge'
 
 ### P4-T1-IG-FAIL
 - case_id: `P4-T1-IG-FAIL`
-- skill_chain: `playwright`（必要时 `+ screenshot`）
-- target_mode: `web_url` 或 `desktop_window`
+- skill_chain: `webdriver + screenshot`
+- target_mode: `desktop_window`
 - setup:
-  1. 准备非法交互（无效输入、重复提交、冲突快捷键等）。
+  1. 准备非法交互（重复热键、冲突快捷键、窗口销毁后重发热键等）。
 - steps:
-  1. 触发非法交互并观察系统拦截。
-  2. 捕获错误提示与系统稳定性证据。
-  3. 立即执行一次合法交互验证可恢复。
+  1. 通过 WebDriver 触发非法热键交互并观察系统拦截。
+  2. 捕获错误提示、窗口异常状态或日志中的降级记录。
+  3. 立即执行一次合法热键呼出验证系统可恢复。
 - oracle:
-  1. 非法交互被拒绝并给出明确提示。
-  2. 系统不崩溃，合法操作可继续完成。
+  1. 非法热键交互被拒绝并给出明确提示或日志。
+  2. 系统不崩溃，后续合法热键操作可继续完成。
 - evidence:
   - `P4-T1-IG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.mp4`
   - `P4-T1-IG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`

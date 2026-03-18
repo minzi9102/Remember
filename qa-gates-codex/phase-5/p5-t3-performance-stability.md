@@ -8,8 +8,8 @@
 | 字段 | 值 |
 |---|---|
 | case_id | `P5-T3-VG-PASS` / `P5-T3-VG-FAIL` / `P5-T3-IG-PASS` / `P5-T3-IG-FAIL` |
-| skill_chain | `playwright`（默认） / `playwright + screenshot`（桌面回退） |
-| target_mode | `web_url`（默认） / `desktop_window`（回退） |
+| skill_chain | `视觉: playwright` / `交互: webdriver + screenshot` |
+| target_mode | `视觉: web_url` / `交互: desktop_window` |
 | setup | 黑盒启动 + 环境校验 |
 | steps | Codex 命令级步骤 |
 | oracle | 可观察判定（UI/日志/查询） |
@@ -24,6 +24,11 @@ $env:TESTER = 'codex'
 $env:RUN_DATE = (Get-Date -Format 'yyyyMMdd')
 $env:PW_BROWSER = 'msedge'
 ```
+
+## 2026-03-18 WebDriver 最小迁移决议
+- 仅迁移交互门禁：`P5-T3-IG-PASS`、`P5-T3-IG-FAIL`。
+- 保留视觉门禁在 `playwright`，继续用于趋势展示和基础可见性检查。
+- 迁移原因：本任务同时覆盖“提交延迟”和“热键响应”，其中热键响应必须在真实 `desktop_window` 中测量才有发布意义。
 
 ## 视觉门禁
 ### P5-T3-VG-PASS
@@ -73,19 +78,19 @@ $env:PW_BROWSER = 'msedge'
 ## 交互门禁
 ### P5-T3-IG-PASS
 - case_id: `P5-T3-IG-PASS`
-- skill_chain: `playwright`
-- target_mode: `web_url`
+- skill_chain: `webdriver + screenshot`
+- target_mode: `desktop_window`
 - setup:
-  1. 使用会话 ID：`P5T3-IG-PASS`。
-  2. 准备一条合法交互链路（输入、提交、切换或导航）。
+  1. 使用 WebDriver 会话 ID：`P5T3-IG-PASS`。
+  2. 准备一条真实桌面交互链路，至少覆盖一次热键呼出和一次提交操作。
 - steps:
-  1. `open -> snapshot` 后执行合法交互链路。
-  2. 记录每一步操作与系统反馈。
-  3. 导出日志或查询结果作为交互佐证。
-  4. 关闭会话。
+  1. 通过 WebDriver 连接真实窗口并记录起始时间戳。
+  2. 发送热键呼出或聚焦动作，记录窗口响应时间。
+  3. 在同一会话内执行最小提交链路，记录提交完成和界面刷新耗时。
+  4. 使用 `screenshot` 与日志/查询结果固化性能证据。
 - oracle:
-  1. 交互链路完整，无卡死或不可恢复状态。
-  2. 结果可通过 UI + 日志/查询交叉验证。
+  1. 热键响应与提交链路在真实桌面窗口下完整执行，无卡死或不可恢复状态。
+  2. 结果可通过窗口状态、耗时记录和日志/查询交叉验证。
 - evidence:
   - `P5-T3-IG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.mp4`
   - `P5-T3-IG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
@@ -95,17 +100,17 @@ $env:PW_BROWSER = 'msedge'
 
 ### P5-T3-IG-FAIL
 - case_id: `P5-T3-IG-FAIL`
-- skill_chain: `playwright`（必要时 `+ screenshot`）
-- target_mode: `web_url` 或 `desktop_window`
+- skill_chain: `webdriver + screenshot`
+- target_mode: `desktop_window`
 - setup:
   1. 准备非法交互（无效输入、重复提交、冲突快捷键等）。
 - steps:
-  1. 触发非法交互并观察系统拦截。
-  2. 捕获错误提示与系统稳定性证据。
-  3. 立即执行一次合法交互验证可恢复。
+  1. 通过 WebDriver 触发会导致响应超时、重复提交或热键冲突的反向路径。
+  2. 捕获错误提示、超时日志或性能降级证据，并用 `screenshot` 固化现场。
+  3. 立即执行一次合法热键/提交链路验证系统可恢复。
 - oracle:
-  1. 非法交互被拒绝并给出明确提示。
-  2. 系统不崩溃，合法操作可继续完成。
+  1. 反向路径被明确拦截或记录性能异常，不能静默失败。
+  2. 系统不崩溃，恢复后合法链路可继续完成。
 - evidence:
   - `P5-T3-IG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.mp4`
   - `P5-T3-IG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
