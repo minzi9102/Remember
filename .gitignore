@@ -13,6 +13,8 @@ dist-ssr
 *.local
 
 .playwright-cli/
+/qa-gates-codex/tmp/
+/.tmp*
 
 # Editor directories and files
 .vscode/*

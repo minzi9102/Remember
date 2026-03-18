@@ -1,9 +1,12 @@
 $ErrorActionPreference = 'Stop'
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = (Resolve-Path (Join-Path $scriptDir '..\..')).Path
+Set-Location $root
 $base = 'http://127.0.0.1:3000'
 $run = '20260317'
 $tester = 'codex'
 $browser = 'msedge'
-$outDir = 'd:\BME2026\TECHNICAL\Remember\qa-gates-codex'
+$outDir = Join-Path $root 'qa-gates-codex'
 $probeJs = "() => ({ path: (document.body.innerText.match(/path:\\s*([^\\n]+)/)||[])[1] ?? '', ok: (document.body.innerText.match(/ok:\\s*(true|false)/)||[])[1] ?? '', code: (document.body.innerText.match(/code:\\s*([^\\n]+)/)||[])[1] ?? '' })"
 
 function Run-PwCmd {

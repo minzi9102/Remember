@@ -1,9 +1,12 @@
 $ErrorActionPreference = 'Stop'
-$root = 'D:\BME2026\TECHNICAL\Remember'
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = (Resolve-Path (Join-Path $scriptDir '..\..')).Path
 Set-Location $root
+$tmpDir = Join-Path $root 'qa-gates-codex\tmp'
+New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
 
-$viteOut = Join-Path $root '.tmp-p3t1-vite.out.log'
-$viteErr = Join-Path $root '.tmp-p3t1-vite.err.log'
+$viteOut = Join-Path $tmpDir 'p3t1-vite.out.log'
+$viteErr = Join-Path $tmpDir 'p3t1-vite.err.log'
 if (Test-Path $viteOut) { Remove-Item $viteOut -Force }
 if (Test-Path $viteErr) { Remove-Item $viteErr -Force }
 
@@ -50,7 +53,7 @@ try {
   }
 
   $env:REMEMBER_TEST_POSTGRES_DSN = 'postgres://remember:remember@127.0.0.1:55432/remember'
-  $rustProof = Join-Path $root '.tmp-p3t1-rust-proof.txt'
+  $rustProof = Join-Path $tmpDir 'p3t1-rust-proof.txt'
   cargo test --manifest-path src-tauri/Cargo.toml --test p3_t1_dual_sync_repository -- --nocapture 2>&1 | Tee-Object -FilePath $rustProof | Out-Null
 
   $base = 'http://127.0.0.1:3000'

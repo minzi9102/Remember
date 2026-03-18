@@ -1,6 +1,9 @@
 $ErrorActionPreference = 'Stop'
-$root = 'D:\BME2026\TECHNICAL\Remember'
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = (Resolve-Path (Join-Path $scriptDir '..\..')).Path
 Set-Location $root
+$tmpDir = Join-Path $root 'qa-gates-codex\tmp'
+New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
 
 Get-CimInstance Win32_Process |
   Where-Object {
@@ -13,8 +16,8 @@ Get-CimInstance Win32_Process |
     try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {}
   }
 
-$viteOut = Join-Path $root '.tmp-p3t4-vite.out.log'
-$viteErr = Join-Path $root '.tmp-p3t4-vite.err.log'
+$viteOut = Join-Path $tmpDir 'p3t4-vite.out.log'
+$viteErr = Join-Path $tmpDir 'p3t4-vite.err.log'
 if (Test-Path $viteOut) { Remove-Item $viteOut -Force -ErrorAction SilentlyContinue }
 if (Test-Path $viteErr) { Remove-Item $viteErr -Force -ErrorAction SilentlyContinue }
 
@@ -61,7 +64,7 @@ try {
   }
 
   $env:REMEMBER_TEST_POSTGRES_DSN = 'postgres://remember:remember@127.0.0.1:55432/remember'
-  $rustProof = Join-Path $root '.tmp-p3t4-rust-proof.txt'
+  $rustProof = Join-Path $tmpDir 'p3t4-rust-proof.txt'
   if (Test-Path $rustProof) { Remove-Item $rustProof -Force }
   cargo test --manifest-path src-tauri/Cargo.toml --test p3_t4_single_side_compensation_alerts -- --nocapture --test-threads=1 2>&1 | Tee-Object -FilePath $rustProof | Out-Null
 
