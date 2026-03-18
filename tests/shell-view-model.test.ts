@@ -1,49 +1,27 @@
 import { describe, expect, it } from "vitest";
 
 import { buildInitialShellState, shellReducer } from "../src/application/shell-view-model";
-import type { RpcEnvelope, SeriesListData } from "../src/application/types";
+import type { SeriesSummary } from "../src/application/types";
 
-function buildSeriesEnvelope(overrides?: Partial<RpcEnvelope<SeriesListData>>): RpcEnvelope<SeriesListData> {
-  return {
-    ok: true,
-    data: {
-      items: [
-        {
-          id: "series-inbox",
-          name: "Inbox",
-          status: "active",
-          lastUpdatedAt: "2026-03-16T00:00:00Z",
-          latestExcerpt: "first-note",
-          createdAt: "2026-03-15T00:00:00Z",
-        },
-        {
-          id: "series-project-a",
-          name: "Project-A",
-          status: "silent",
-          lastUpdatedAt: "2026-03-08T00:00:00Z",
-          latestExcerpt: "follow-up-note",
-          createdAt: "2026-03-01T00:00:00Z",
-        },
-      ],
-      nextCursor: null,
-      limitEcho: 50,
+function buildSeriesList(overrides?: SeriesSummary[]): SeriesSummary[] {
+  return overrides ?? [
+    {
+      id: "series-inbox",
+      name: "Inbox",
+      status: "active",
+      lastUpdatedAt: "2026-03-16T00:00:00Z",
+      latestExcerpt: "first-note",
+      createdAt: "2026-03-15T00:00:00Z",
     },
-    meta: {
-      path: "series.list",
-      runtimeMode: "sqlite_only",
-      usedFallback: false,
-      respondedAtUnixMs: 123,
-      startupSelfHeal: {
-        scannedAlerts: 0,
-        repairedAlerts: 0,
-        unresolvedAlerts: 0,
-        failedAlerts: 0,
-        completedAt: "2026-03-17T00:00:00Z",
-        messages: [],
-      },
+    {
+      id: "series-project-a",
+      name: "Project-A",
+      status: "silent",
+      lastUpdatedAt: "2026-03-08T00:00:00Z",
+      latestExcerpt: "follow-up-note",
+      createdAt: "2026-03-01T00:00:00Z",
     },
-    ...overrides,
-  };
+  ];
 }
 
 function buildSnapshot() {
@@ -92,7 +70,7 @@ function buildSnapshot() {
 
 describe("shell view model", () => {
   it("selects the first series when bootstrapped with data", () => {
-    const state = buildInitialShellState(buildSnapshot(), buildSeriesEnvelope());
+    const state = buildInitialShellState(buildSnapshot(), buildSeriesList(), null);
 
     expect(state.view).toBe("series_list");
     expect(state.selectedSeriesId).toBe("series-inbox");
@@ -102,23 +80,14 @@ describe("shell view model", () => {
   });
 
   it("keeps an empty selection when the list is empty", () => {
-    const state = buildInitialShellState(
-      buildSnapshot(),
-      buildSeriesEnvelope({
-        data: {
-          items: [],
-          nextCursor: null,
-          limitEcho: 50,
-        },
-      }),
-    );
+    const state = buildInitialShellState(buildSnapshot(), [], null);
 
     expect(state.selectedSeriesId).toBeNull();
     expect(state.seriesList).toEqual([]);
   });
 
   it("opens timeline and returns to the list without losing selection", () => {
-    const initial = buildInitialShellState(buildSnapshot(), buildSeriesEnvelope());
+    const initial = buildInitialShellState(buildSnapshot(), buildSeriesList(), null);
     const selected = shellReducer(initial, {
       type: "series.selected",
       seriesId: "series-project-a",
@@ -148,7 +117,7 @@ describe("shell view model", () => {
   });
 
   it("moves selection through the list and clamps at the boundaries", () => {
-    const initial = buildInitialShellState(buildSnapshot(), buildSeriesEnvelope());
+    const initial = buildInitialShellState(buildSnapshot(), buildSeriesList(), null);
     const movedDown = shellReducer(initial, {
       type: "series.selection.moved",
       direction: "down",
@@ -168,7 +137,7 @@ describe("shell view model", () => {
   });
 
   it("clears error state when retrying timeline load", () => {
-    const initial = buildInitialShellState(buildSnapshot(), buildSeriesEnvelope());
+    const initial = buildInitialShellState(buildSnapshot(), buildSeriesList(), null);
     const opening = shellReducer(initial, {
       type: "timeline.requested",
       seriesId: "series-inbox",
@@ -193,7 +162,7 @@ describe("shell view model", () => {
   });
 
   it("falls back to the first series when the selected row disappears", () => {
-    const initial = buildInitialShellState(buildSnapshot(), buildSeriesEnvelope());
+    const initial = buildInitialShellState(buildSnapshot(), buildSeriesList(), null);
     const selected = shellReducer(initial, {
       type: "series.selected",
       seriesId: "series-project-a",
@@ -217,7 +186,7 @@ describe("shell view model", () => {
   });
 
   it("opens and cancels input modes while clearing drafts", () => {
-    const initial = buildInitialShellState(buildSnapshot(), buildSeriesEnvelope());
+    const initial = buildInitialShellState(buildSnapshot(), buildSeriesList(), null);
     const search = shellReducer(initial, {
       type: "interaction.search.opened",
     });
@@ -252,14 +221,31 @@ describe("shell view model", () => {
   });
 
   it("uses a preferred series id when refreshing the list", () => {
-    const initial = buildInitialShellState(buildSnapshot(), buildSeriesEnvelope());
+    const initial = buildInitialShellState(buildSnapshot(), buildSeriesList(), null);
     const replaced = shellReducer(initial, {
       type: "series.list.replaced",
-      seriesList: buildSeriesEnvelope().data?.items ?? [],
+      seriesList: buildSeriesList(),
       navigationError: null,
       preferredSeriesId: "series-project-a",
     });
 
     expect(replaced.selectedSeriesId).toBe("series-project-a");
+  });
+
+  it("surfaces an initial interaction warning when silent scan fails", () => {
+    const state = buildInitialShellState(
+      buildSnapshot(),
+      buildSeriesList(),
+      null,
+      {
+        code: "DUAL_WRITE_FAILED",
+        message: "failed to refresh silent series status",
+      },
+    );
+
+    expect(state.interactionFeedback).toEqual({
+      code: "DUAL_WRITE_FAILED",
+      message: "failed to refresh silent series status",
+    });
   });
 });

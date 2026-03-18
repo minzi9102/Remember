@@ -35,6 +35,11 @@ export interface TimelineRequest {
   limit: number;
 }
 
+export interface SilentScanRequest {
+  now: string;
+  thresholdDays: number;
+}
+
 interface MockStore {
   series: SeriesSummary[];
   commits: CommitItem[];
@@ -57,6 +62,7 @@ const DUAL_WRITE_FAILED = "DUAL_WRITE_FAILED";
 const INVOKE_FAILED = "INVOKE_FAILED";
 const FORCE_ERROR_CODE_FIELD = "__forceErrorCode";
 const MAX_EXCERPT_LENGTH = 48;
+const DEFAULT_SILENT_DAYS_THRESHOLD = 7;
 const INITIAL_MOCK_TIMESTAMP_MS = Date.parse("2026-03-16T12:00:00Z");
 const mockStores = new Map<string, MockStore>();
 
@@ -260,6 +266,27 @@ export function readMockArchiveSeries(
   ) as RpcEnvelope<SeriesArchiveData>;
 }
 
+export function readMockScanSilent(
+  search: string,
+  request: SilentScanRequest = buildDefaultSilentScanRequest(),
+): RpcEnvelope<SeriesScanSilentData> {
+  const runtimeStatus = parseMockRuntimeStatus(search);
+  const mockRequest = buildMockRequest(
+    search,
+    "series.scan_silent",
+    { ...request },
+    runtimeStatus.mode,
+  );
+
+  return mockInvoke(
+    "series.scan_silent",
+    mockRequest.payload,
+    runtimeStatus,
+    mockRequest.startupSelfHeal,
+    { sessionKey: mockRequest.sessionKey },
+  ) as RpcEnvelope<SeriesScanSilentData>;
+}
+
 export async function loadSeriesList(
   request: SeriesListRequest,
 ): Promise<RpcEnvelope<SeriesListData>> {
@@ -298,6 +325,12 @@ export async function archiveSeries(
   return invokeRpcEnvelope<SeriesArchiveData>("series.archive", {
     seriesId,
   });
+}
+
+export async function scanSilentSeries(
+  request: SilentScanRequest = buildDefaultSilentScanRequest(),
+): Promise<RpcEnvelope<SeriesScanSilentData>> {
+  return invokeRpcEnvelope<SeriesScanSilentData>("series.scan_silent", { ...request });
 }
 
 function collectWarningsFromParams(params: URLSearchParams): string[] {
@@ -507,7 +540,12 @@ function buildMockRequest(
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const path = forcedPath ?? normalizeProbePath(params.get("rpc_path"));
   const forceFail = isTruthy(params.get("rpc_fail"));
-  const forceErrorCode = parseForcedErrorCode(params.get("rpc_error"));
+  const rawScopedErrorPath = params.get("rpc_error_path")?.trim() ?? null;
+  const forceErrorCode = parseForcedErrorCode(
+    rawScopedErrorPath === null || rawScopedErrorPath.length === 0 || rawScopedErrorPath === path
+      ? params.get("rpc_error")
+      : null,
+  );
   const basePayload = forceFail
     ? buildFailPayload(path)
     : payloadOverride ?? buildSuccessPayload(path);
@@ -542,6 +580,13 @@ export function buildDefaultSeriesListRequest(): SeriesListRequest {
     includeArchived: false,
     cursor: null,
     limit: 50,
+  };
+}
+
+export function buildDefaultSilentScanRequest(now = new Date().toISOString()): SilentScanRequest {
+  return {
+    now,
+    thresholdDays: 0,
   };
 }
 
@@ -596,7 +641,7 @@ function buildSuccessPayload(path: string): Record<string, unknown> {
     case "series.archive":
       return { seriesId: "series-inbox" };
     case "series.scan_silent":
-      return { now: "2026-03-16T00:00:00Z", thresholdDays: 7 };
+      return { now: "2026-03-16T00:00:00Z", thresholdDays: 0 };
     default:
       return {};
   }
@@ -798,10 +843,25 @@ function mockDispatch(
       return data;
     }
     case "series.scan_silent": {
-      requireRfc3339String(payload, "now");
-      const thresholdDays = requirePositiveInteger(payload, "thresholdDays");
+      const now = requireRfc3339String(payload, "now");
+      const thresholdDays = resolveSilentThresholdDays(
+        requireNonNegativeInteger(payload, "thresholdDays"),
+      );
+      const thresholdBefore = computeSilentThresholdBefore(now, thresholdDays);
+      const affectedSeriesIds = store.series
+        .filter((item) => item.status === "active" && item.lastUpdatedAt < thresholdBefore)
+        .map((item) => item.id)
+        .sort((left, right) => left.localeCompare(right));
+
+      for (const seriesId of affectedSeriesIds) {
+        const series = store.series.find((item) => item.id === seriesId);
+        if (series !== undefined) {
+          series.status = "silent";
+        }
+      }
+
       const data: SeriesScanSilentData = {
-        affectedSeriesIds: [],
+        affectedSeriesIds,
         thresholdDays,
       };
       return data;
@@ -959,6 +1019,15 @@ function nextMockTimestamp(store: MockStore): string {
   return timestamp;
 }
 
+function resolveSilentThresholdDays(thresholdDays: number): number {
+  return thresholdDays === 0 ? DEFAULT_SILENT_DAYS_THRESHOLD : thresholdDays;
+}
+
+function computeSilentThresholdBefore(now: string, thresholdDays: number): string {
+  const thresholdMs = Date.parse(now) - thresholdDays * 24 * 60 * 60 * 1000;
+  return new Date(thresholdMs).toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 function readForcedRpcError(payload: Record<string, unknown>): { code: string; message: string } | null {
   const raw = payload[FORCE_ERROR_CODE_FIELD];
   if (typeof raw !== "string") {
@@ -1079,6 +1148,25 @@ function requirePositiveInteger(payload: Record<string, unknown>, key: string): 
   }
 
   return value;
+}
+
+function requireNonNegativeInteger(payload: Record<string, unknown>, key: string): number {
+  if (!(key in payload)) {
+    throw {
+      code: VALIDATION_ERROR,
+      message: `field \`${key}\` must be a non-negative integer`,
+    };
+  }
+
+  const raw = payload[key];
+  if (typeof raw === "number" && Number.isInteger(raw) && raw >= 0) {
+    return raw;
+  }
+
+  throw {
+    code: VALIDATION_ERROR,
+    message: `field \`${key}\` must be a non-negative integer`,
+  };
 }
 
 function readOptionalPositiveInteger(

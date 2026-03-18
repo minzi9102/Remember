@@ -117,3 +117,15 @@ $env:PW_BROWSER = 'msedge'
 - source gate: `qa-gates/phase-4/p4-t5-silent-detection.md`
 - DEV.md 映射: series.scan_silent
 - ROADMAP.md 映射: Phase 4 / 子任务 5
+
+## 2026-03-18 执行结果
+| case_id | result | evidence |
+|---|---|---|
+| `P4-T5-VG-PASS` | PASS | `qa-gates-codex/P4-T5-VG-PASS_20260318_ENV-SQLITE_codex.png` + `qa-gates-codex/P4-T5-VG-PASS_20260318_ENV-SQLITE_codex.txt` |
+| `P4-T5-VG-FAIL` | PASS | `qa-gates-codex/P4-T5-VG-FAIL_20260318_ENV-SQLITE_codex.png` + `qa-gates-codex/P4-T5-VG-FAIL_20260318_ENV-SQLITE_codex.txt` |
+| `P4-T5-IG-PASS` | PASS | `qa-gates-codex/P4-T5-IG-PASS_20260318_ENV-SQLITE_codex.mp4` + `qa-gates-codex/P4-T5-IG-PASS_20260318_ENV-SQLITE_codex.txt` |
+| `P4-T5-IG-FAIL` | PASS | `qa-gates-codex/P4-T5-IG-FAIL_20260318_ENV-SQLITE_codex.mp4` + `qa-gates-codex/P4-T5-IG-FAIL_20260318_ENV-SQLITE_codex.txt` |
+
+- target_mode: `web_url`
+- overall: `PASS`
+- note: startup and refresh now run `series.scan_silent -> series.list`, so the web gate could verify both the visible silent badge/downranking path and the degraded-but-usable scan failure path in the same browser mock runtime.

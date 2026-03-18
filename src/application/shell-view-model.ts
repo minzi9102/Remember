@@ -2,9 +2,7 @@ import type { AdapterSnapshot } from "../adapter/runtime-adapter";
 import type {
   CommitItem,
   PendingShellAction,
-  RpcEnvelope,
   RpcError,
-  SeriesListData,
   SeriesSummary,
   ShellState,
 } from "./types";
@@ -80,13 +78,13 @@ export type ShellAction =
 
 export function buildInitialShellState(
   snapshot: AdapterSnapshot,
-  seriesEnvelope: RpcEnvelope<SeriesListData>,
+  seriesList: SeriesSummary[],
+  navigationError: RpcError | null,
+  interactionFeedback: RpcError | null = null,
 ): ShellState {
-  const seriesList = seriesEnvelope.ok ? seriesEnvelope.data?.items ?? [] : [];
-
   return {
     appTitle: "Remember",
-    subtitle: "Phase 4 Task 4 - Submit and Reorder",
+    subtitle: "Phase 4 Task 5 - Silent Detection",
     layers: {
       adapter: snapshot.adapter,
       application: "ready",
@@ -100,13 +98,13 @@ export function buildInitialShellState(
     activeTimelineSeries: null,
     timelineLoadState: "idle",
     timelineItems: [],
-    navigationError: seriesEnvelope.ok ? null : ensureRpcError(seriesEnvelope.error, "series list"),
+    navigationError,
     interactionMode: "browse",
     searchQuery: "",
     newSeriesNameDraft: "",
     commitDraft: "",
     pendingAction: null,
-    interactionFeedback: null,
+    interactionFeedback,
   };
 }
 
@@ -344,15 +342,4 @@ function moveSelectedSeriesId(
       : Math.min(seriesList.length - 1, currentIndex + 1);
 
   return seriesList[nextIndex]?.id ?? null;
-}
-
-function ensureRpcError(error: RpcError | undefined, target: string): RpcError {
-  if (error !== undefined) {
-    return error;
-  }
-
-  return {
-    code: "INVOKE_FAILED",
-    message: `failed to load ${target}`,
-  };
 }

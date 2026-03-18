@@ -9,7 +9,7 @@ import {
   loadSeriesList,
   loadTimeline,
 } from "./adapter/runtime-adapter";
-import { bootstrapShell } from "./application/bootstrap";
+import { bootstrapShell, loadSilentAwareSeriesList } from "./application/bootstrap";
 import { interpretShellKeyboardEvent } from "./application/shell-shortcuts";
 import { shellReducer, type ShellAction } from "./application/shell-view-model";
 import type { RpcError, ShellState } from "./application/types";
@@ -140,28 +140,42 @@ function App() {
 
   const refreshSeriesList = useEffectEvent(
     async (preferredSeriesId: string | null, feedbackMessage: string) => {
-      const envelope = await loadSeriesList(buildDefaultSeriesListRequest());
+      const result = await loadSilentAwareSeriesList();
 
-      if (!envelope.ok || envelope.data === undefined) {
+      if (result.seriesListData === null) {
         startTransition(() => {
           dispatch({
             type: "interaction.feedback.set",
-            feedback: resolveRpcError(envelope.error, feedbackMessage),
+            feedback: result.seriesListError ?? {
+              code: "INVOKE_FAILED",
+              message: feedbackMessage,
+            },
           });
         });
-      return false;
-    }
+        return false;
+      }
 
-    const seriesList = envelope.data.items;
+      const seriesListData = result.seriesListData;
 
-    startTransition(() => {
-      dispatch({
-        type: "series.list.replaced",
-        seriesList,
-        navigationError: null,
-        preferredSeriesId,
+      startTransition(() => {
+        dispatch({
+          type: "series.list.replaced",
+          seriesList: seriesListData.items,
+          navigationError: null,
+          preferredSeriesId,
+        });
       });
-    });
+
+      startTransition(() => {
+        dispatch(
+          result.silentScanError === null
+            ? { type: "interaction.feedback.cleared" }
+            : {
+                type: "interaction.feedback.set",
+                feedback: result.silentScanError,
+              },
+        );
+      });
 
       return true;
     },

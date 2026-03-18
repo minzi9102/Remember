@@ -17,7 +17,7 @@
 {"task_name":"实现一级列表与二级时间线视图切换。","completed":true}
 {"task_name":"实现键盘操作（`↑/↓`、`Enter`、`Esc`、`←/→`、`/`、`Shift+N`、`a`）。","completed":true}
 {"task_name":"提交后列表置顶刷新与摘录更新。","completed":true}
-{"task_name":"实现沉寂判定与下沉显示。","completed":false}
+{"task_name":"实现沉寂判定与下沉显示。","completed":true}
 {"task_name":"实现归档移出主列表、时间线只读。","completed":false}
 {"task_name":"执行全量功能回归（含三模式）。","completed":false}
 {"task_name":"执行双写异常演练与恢复验证。","completed":false}

@@ -146,11 +146,12 @@ export function RememberShell({
               <ul className="series-list" aria-label="Series list">
                 {shell.seriesList.map((item) => {
                   const isSelected = item.id === shell.selectedSeriesId;
+                  const isSilent = item.status === "silent";
 
                   return (
                     <li
                       key={item.id}
-                      className={`series-row${isSelected ? " is-selected" : ""}`}
+                      className={`series-row${isSelected ? " is-selected" : ""}${isSilent ? " is-silent" : ""}`}
                       data-testid={`series-row-${item.id}`}
                     >
                       <button
@@ -160,7 +161,14 @@ export function RememberShell({
                         onClick={() => onSelectSeries(item.id)}
                         onDoubleClick={() => onOpenTimeline(item.id)}
                       >
-                        <span className="series-name">{item.name}</span>
+                        <span className="series-nameplate">
+                          <span className="series-name">{item.name}</span>
+                          {isSilent ? (
+                            <span className="series-status-badge" data-testid={`series-status-${item.id}`}>
+                              Silent
+                            </span>
+                          ) : null}
+                        </span>
                         <span className="series-excerpt">{item.latestExcerpt}</span>
                       </button>
 

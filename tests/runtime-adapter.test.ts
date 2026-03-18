@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildDefaultSilentScanRequest,
   readMockAppendCommit,
   readMockArchiveSeries,
   buildDefaultSeriesListRequest,
@@ -9,6 +10,7 @@ import {
   parseNativeRuntimeStatusFromTitle,
   readMockCommandProbe,
   readMockCreateSeries,
+  readMockScanSilent,
   readMockSeriesList,
   readMockTimeline,
 } from "../src/adapter/runtime-adapter";
@@ -174,6 +176,18 @@ describe("runtime-adapter command envelope probe", () => {
     });
   });
 
+  it("returns DTO fields for series.scan_silent", () => {
+    const probe = readMockCommandProbe(
+      withMockSession("?runtime_mode=sqlite_only&rpc_path=series.scan_silent"),
+    );
+
+    expect(probe.envelope.ok).toBe(true);
+    expect(probe.envelope.data).toMatchObject({
+      affectedSeriesIds: [],
+      thresholdDays: 7,
+    });
+  });
+
   it("returns validation error when rpc_fail is enabled", () => {
     const probe = readMockCommandProbe(withMockSession("?runtime_mode=sqlite_only&rpc_fail=1"));
 
@@ -312,6 +326,42 @@ describe("runtime-adapter typed helpers", () => {
     expect(envelope.error?.code).toBe("DUAL_WRITE_FAILED");
   });
 
+  it("returns silent scan data in mock mode", () => {
+    const envelope = readMockScanSilent(
+      withMockSession("?runtime_mode=sqlite_only"),
+      buildDefaultSilentScanRequest("2026-03-24T00:00:00Z"),
+    );
+
+    expect(envelope.ok).toBe(true);
+    expect(envelope.data).toMatchObject({
+      affectedSeriesIds: ["series-inbox"],
+      thresholdDays: 7,
+    });
+  });
+
+  it("returns forced error for silent scan helper", () => {
+    const envelope = readMockScanSilent(
+      withMockSession("?runtime_mode=dual_sync&rpc_error=dual_write_failed"),
+      buildDefaultSilentScanRequest("2026-03-24T00:00:00Z"),
+    );
+
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error?.code).toBe("DUAL_WRITE_FAILED");
+  });
+
+  it("limits forced errors to the configured rpc path when rpc_error_path is set", () => {
+    const search = withMockSession(
+      "?runtime_mode=sqlite_only&rpc_error=dual_write_failed&rpc_error_path=series.scan_silent",
+    );
+
+    const scanned = readMockScanSilent(search, buildDefaultSilentScanRequest("2026-03-24T00:00:00Z"));
+    const listed = readMockSeriesList(search, buildDefaultSeriesListRequest());
+
+    expect(scanned.ok).toBe(false);
+    expect(scanned.error?.code).toBe("DUAL_WRITE_FAILED");
+    expect(listed.ok).toBe(true);
+  });
+
   it("returns forced error for timeline helper", () => {
     const envelope = readMockTimeline(
       withMockSession("?runtime_mode=dual_sync&rpc_error=dual_write_failed"),
@@ -413,6 +463,51 @@ describe("runtime-adapter typed helpers", () => {
     expect(timeline.data?.items[0]).toMatchObject({
       content: "timeline verification note",
       createdAt: "2026-03-18T03:00:00Z",
+    });
+  });
+
+  it("marks stale active series as silent after an explicit scan in the same mock session", () => {
+    const search = withMockSession("?runtime_mode=sqlite_only");
+
+    const scanned = readMockScanSilent(
+      search,
+      buildDefaultSilentScanRequest("2026-03-24T00:00:00Z"),
+    );
+    const listed = readMockSeriesList(search, buildDefaultSeriesListRequest());
+
+    expect(scanned.ok).toBe(true);
+    expect(scanned.data?.affectedSeriesIds).toEqual(["series-inbox"]);
+    expect(listed.data?.items.find((item) => item.id === "series-inbox")).toMatchObject({
+      status: "silent",
+    });
+  });
+
+  it("reactivates a silent series after a new commit in the same mock session", () => {
+    const search = withMockSession("?runtime_mode=sqlite_only");
+
+    const scanned = readMockScanSilent(
+      search,
+      buildDefaultSilentScanRequest("2026-03-24T00:00:00Z"),
+    );
+    const appended = readMockAppendCommit(
+      search,
+      "series-project-a",
+      "wake up again",
+      "2026-03-24T01:00:00Z",
+    );
+    const listed = readMockSeriesList(search, buildDefaultSeriesListRequest());
+
+    expect(scanned.ok).toBe(true);
+    expect(appended.ok).toBe(true);
+    expect(appended.data?.series).toMatchObject({
+      id: "series-project-a",
+      status: "active",
+      latestExcerpt: "wake up again",
+    });
+    expect(listed.data?.items[0]).toMatchObject({
+      id: "series-project-a",
+      status: "active",
+      latestExcerpt: "wake up again",
     });
   });
 

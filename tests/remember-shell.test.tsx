@@ -7,7 +7,7 @@ import { RememberShell } from "../src/ui/RememberShell";
 function buildShell(overrides?: Partial<ShellState>): ShellState {
   return {
     appTitle: "Remember",
-    subtitle: "Phase 4 Task 4 - Submit and Reorder",
+    subtitle: "Phase 4 Task 5 - Silent Detection",
     layers: {
       adapter: "ready",
       application: "ready",
@@ -107,6 +107,7 @@ describe("RememberShell list and timeline views", () => {
 
     expect(markup).toContain("Series");
     expect(markup).toContain("Inbox");
+    expect(markup).toContain("Silent");
     expect(markup).toContain("View timeline");
     expect(markup).toContain("Startup Self-Heal");
     expect(markup).toContain("No unresolved startup alerts.");
@@ -261,5 +262,12 @@ describe("RememberShell list and timeline views", () => {
     expect(markup).toContain("ARCHIVE_DISABLED");
     expect(markup).toContain("only silent series can be archived with `a`");
     expect(markup).toContain("Archiving the selected silent series...");
+  });
+
+  it("renders silent rows with a visual status marker", () => {
+    const markup = renderShellMarkup(buildShell());
+
+    expect(markup).toContain('data-testid="series-status-series-project-a"');
+    expect(markup).toContain("series-row is-silent");
   });
 });

@@ -6,7 +6,7 @@ import type { ShellState } from "../src/application/types";
 function buildShell(overrides?: Partial<ShellState>): ShellState {
   return {
     appTitle: "Remember",
-    subtitle: "Phase 4 Task 4 - Submit and Reorder",
+    subtitle: "Phase 4 Task 5 - Silent Detection",
     layers: {
       adapter: "ready",
       application: "ready",

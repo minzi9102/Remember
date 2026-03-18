@@ -336,7 +336,7 @@ async fn series_scan_silent(
     service: &ApplicationService,
 ) -> Result<Value, RpcError> {
     let now = required_non_empty_string(payload, "now")?;
-    let threshold_days = required_positive_u64(payload, "thresholdDays")?;
+    let threshold_days = required_non_negative_u64(payload, "thresholdDays")?;
     let data = service
         .scan_silent(now, threshold_days)
         .await
@@ -422,6 +422,14 @@ fn required_positive_u64(payload: &Value, key: &str) -> Result<u64, RpcError> {
         .and_then(Value::as_u64)
         .filter(|value| *value > 0)
         .ok_or_else(|| RpcError::validation(format!("field `{key}` must be a positive integer")))
+}
+
+fn required_non_negative_u64(payload: &Value, key: &str) -> Result<u64, RpcError> {
+    payload
+        .as_object()
+        .and_then(|object| object.get(key))
+        .and_then(Value::as_u64)
+        .ok_or_else(|| RpcError::validation(format!("field `{key}` must be a non-negative integer")))
 }
 
 #[cfg(test)]
@@ -611,6 +619,63 @@ mod tests {
         assert!(!envelope.ok);
         let error = envelope.error.expect("error should exist");
         assert_eq!(error.code, VALIDATION_ERROR_CODE);
+    }
+
+    #[tokio::test]
+    async fn series_scan_silent_accepts_zero_threshold_days() {
+        let state = test_state();
+        let service_state = build_test_service_state().await;
+        let created = handle_rpc(
+            "series.create",
+            serde_json::json!({ "name": "Old Inbox" }),
+            &state,
+            &service_state,
+        )
+        .await;
+        let series_id = created
+            .data
+            .as_ref()
+            .and_then(|value| value.get("series"))
+            .and_then(|value| value.get("id"))
+            .and_then(Value::as_str)
+            .expect("series id should exist")
+            .to_string();
+        let _ = handle_rpc(
+            "commit.append",
+            serde_json::json!({
+                "seriesId": series_id.clone(),
+                "content": "aging note",
+                "clientTs": "2026-03-01T00:00:00Z"
+            }),
+            &state,
+            &service_state,
+        )
+        .await;
+
+        let envelope = handle_rpc(
+            "series.scan_silent",
+            serde_json::json!({
+                "now": "2026-03-16T00:00:00+08:00",
+                "thresholdDays": 0
+            }),
+            &state,
+            &service_state,
+        )
+        .await;
+
+        assert!(envelope.ok);
+        let data = envelope
+            .data
+            .as_ref()
+            .and_then(Value::as_object)
+            .expect("data should be an object");
+        assert_eq!(data.get("thresholdDays").and_then(Value::as_u64), Some(7));
+        let affected_ids = data
+            .get("affectedSeriesIds")
+            .and_then(Value::as_array)
+            .expect("affected ids should exist");
+        assert_eq!(affected_ids.len(), 1);
+        assert_eq!(affected_ids[0].as_str(), Some(series_id.as_str()));
     }
 
     #[tokio::test]
