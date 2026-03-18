@@ -424,7 +424,7 @@ function Bootstrap-ModeStorage {
 function Invoke-Python {
   param([string]$Code)
 
-  & $pythonExe -c $Code
+  $Code | & $pythonExe -
   if ($LASTEXITCODE -ne 0) {
     throw "python command failed with exit code $LASTEXITCODE"
   }
