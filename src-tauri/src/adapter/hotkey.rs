@@ -41,10 +41,12 @@ pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-fn register_global_hotkey<R: Runtime>(app: &AppHandle<R>, configured_hotkey: &str) -> Result<(), String> {
-    let shortcut = Shortcut::from_str(configured_hotkey).map_err(|error| {
-        format!("failed to parse hotkey `{configured_hotkey}`: {error}")
-    })?;
+fn register_global_hotkey<R: Runtime>(
+    app: &AppHandle<R>,
+    configured_hotkey: &str,
+) -> Result<(), String> {
+    let shortcut = Shortcut::from_str(configured_hotkey)
+        .map_err(|error| format!("failed to parse hotkey `{configured_hotkey}`: {error}"))?;
 
     app.global_shortcut()
         .on_shortcut(shortcut, |app, _shortcut, event| {
@@ -149,9 +151,7 @@ fn append_hotkey_marker_to_title(current_title: &str) -> String {
 }
 
 fn build_hotkey_disabled_warning(configured_hotkey: &str, error: &str) -> String {
-    format!(
-        "global hotkey disabled: `{configured_hotkey}` registration failed ({error})"
-    )
+    format!("global hotkey disabled: `{configured_hotkey}` registration failed ({error})")
 }
 
 #[cfg(test)]

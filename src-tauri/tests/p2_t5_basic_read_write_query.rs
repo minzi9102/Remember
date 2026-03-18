@@ -20,15 +20,15 @@ async fn p2_t5_sqlite_basic_read_write_query() {
         .await
         .expect("failed to run sqlite migrations for p2-t5");
 
-    let repo: Arc<dyn MemoRepository + Send + Sync> = Arc::new(repository::SqliteRepository::new(pool));
+    let repo: Arc<dyn MemoRepository + Send + Sync> =
+        Arc::new(repository::SqliteRepository::new(pool));
     run_p2_t5_suite(repo, format!("p2t5-sqlite-{}", nonce())).await;
 }
 
 #[tokio::test]
 async fn p2_t5_postgres_basic_read_write_query() {
-    let dsn = std::env::var("REMEMBER_TEST_POSTGRES_DSN").expect(
-        "REMEMBER_TEST_POSTGRES_DSN is required for p2_t5_postgres_basic_read_write_query",
-    );
+    let dsn = std::env::var("REMEMBER_TEST_POSTGRES_DSN")
+        .expect("REMEMBER_TEST_POSTGRES_DSN is required for p2_t5_postgres_basic_read_write_query");
 
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -126,7 +126,10 @@ async fn run_p2_t5_suite(repo: Arc<dyn MemoRepository + Send + Sync>, prefix: St
         .expect("append second commit should succeed");
     assert_eq!(append_result.commit.id, commit_2);
     assert_eq!(append_result.series.id, series_inbox);
-    assert_eq!(append_result.series.latest_excerpt, "follow-up-note for p2-t5 coverage");
+    assert_eq!(
+        append_result.series.latest_excerpt,
+        "follow-up-note for p2-t5 coverage"
+    );
 
     let reordered = repo
         .list_series(ListSeriesQuery {
@@ -183,7 +186,10 @@ async fn run_p2_t5_suite(repo: Arc<dyn MemoRepository + Send + Sync>, prefix: St
         .await
         .expect("list without archived should succeed");
     assert!(
-        without_archived.items.iter().all(|item| item.id != series_archive),
+        without_archived
+            .items
+            .iter()
+            .all(|item| item.id != series_archive),
         "archived series should be hidden when include_archived=false"
     );
 
@@ -196,7 +202,10 @@ async fn run_p2_t5_suite(repo: Arc<dyn MemoRepository + Send + Sync>, prefix: St
         .await
         .expect("list with archived should succeed");
     assert!(
-        with_archived.items.iter().any(|item| item.id == series_archive),
+        with_archived
+            .items
+            .iter()
+            .any(|item| item.id == series_archive),
         "archived series should be present when include_archived=true"
     );
 
@@ -242,7 +251,10 @@ async fn run_p2_t5_suite(repo: Arc<dyn MemoRepository + Send + Sync>, prefix: St
         })
         .await
         .expect_err("archive for missing series should fail");
-    assert!(matches!(archive_missing_error, RepositoryError::NotFound(_)));
+    assert!(matches!(
+        archive_missing_error,
+        RepositoryError::NotFound(_)
+    ));
 
     let invalid_list_limit_error = repo
         .list_series(ListSeriesQuery {
@@ -278,7 +290,10 @@ async fn run_p2_t5_suite(repo: Arc<dyn MemoRepository + Send + Sync>, prefix: St
         })
         .await
         .expect_err("empty search query should fail");
-    assert!(matches!(invalid_search_error, RepositoryError::Validation(_)));
+    assert!(matches!(
+        invalid_search_error,
+        RepositoryError::Validation(_)
+    ));
 }
 
 async fn cleanup_postgres_prefix(pool: &sqlx::PgPool, prefix: &str) {

@@ -40,7 +40,8 @@ async fn p3_t1_dual_sync_keeps_commit_id_and_created_at_consistent() {
     let prefix = format!("p3t1-dual-{}", nonce());
     cleanup_postgres_prefix(&postgres_pool, &prefix).await;
 
-    let repository = repository::DualSyncRepository::new(sqlite_pool.clone(), postgres_pool.clone());
+    let repository =
+        repository::DualSyncRepository::new(sqlite_pool.clone(), postgres_pool.clone());
     let series_id = format!("{prefix}-series");
     let commit_id = format!("{prefix}-commit");
     let created_at = "2099-03-17T10:00:00Z";

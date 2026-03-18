@@ -429,7 +429,9 @@ fn required_non_negative_u64(payload: &Value, key: &str) -> Result<u64, RpcError
         .as_object()
         .and_then(|object| object.get(key))
         .and_then(Value::as_u64)
-        .ok_or_else(|| RpcError::validation(format!("field `{key}` must be a non-negative integer")))
+        .ok_or_else(|| {
+            RpcError::validation(format!("field `{key}` must be a non-negative integer"))
+        })
 }
 
 #[cfg(test)]
