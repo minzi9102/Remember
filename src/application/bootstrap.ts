@@ -6,7 +6,9 @@ import {
   scanSilentSeries,
 } from "../adapter/runtime-adapter";
 import { buildInitialShellState } from "./shell-view-model";
-import type { RpcError, SeriesListData, ShellState } from "./types";
+import type { RpcError, SeriesCollection, SeriesListData, ShellState } from "./types";
+
+const ARCHIVED_COLLECTION_LIMIT = 200;
 
 export interface SilentAwareSeriesListLoadResult {
   seriesListData: SeriesListData | null;
@@ -17,7 +19,7 @@ export interface SilentAwareSeriesListLoadResult {
 export async function bootstrapShell(): Promise<ShellState> {
   const [snapshot, seriesResult] = await Promise.all([
     readAdapterSnapshot(),
-    loadSilentAwareSeriesList(),
+    loadSeriesCollection("active", { refreshSilent: true }),
   ]);
 
   return buildInitialShellState(
@@ -28,19 +30,59 @@ export async function bootstrapShell(): Promise<ShellState> {
   );
 }
 
-export async function loadSilentAwareSeriesList(): Promise<SilentAwareSeriesListLoadResult> {
-  const silentScanEnvelope = await scanSilentSeries(buildDefaultSilentScanRequest());
-  const seriesEnvelope = await loadSeriesList(buildDefaultSeriesListRequest());
+export async function loadSeriesCollection(
+  collection: SeriesCollection,
+  options?: {
+    query?: string;
+    refreshSilent?: boolean;
+  },
+): Promise<SilentAwareSeriesListLoadResult> {
+  const query = options?.query ?? "";
+  const refreshSilent = options?.refreshSilent === true && collection === "active" && query.length === 0;
+  const silentScanEnvelope = refreshSilent
+    ? await scanSilentSeries(buildDefaultSilentScanRequest())
+    : null;
+  const seriesEnvelope = await loadSeriesList(buildSeriesListRequestForCollection(collection, query));
 
   return {
-    seriesListData: seriesEnvelope.ok ? seriesEnvelope.data ?? null : null,
+    seriesListData:
+      seriesEnvelope.ok && seriesEnvelope.data !== undefined
+        ? filterSeriesListDataForCollection(collection, seriesEnvelope.data)
+        : null,
     seriesListError: seriesEnvelope.ok
       ? null
       : ensureRpcError(seriesEnvelope.error, "failed to load the series list"),
     silentScanError:
-      silentScanEnvelope.ok && silentScanEnvelope.data !== undefined
+      silentScanEnvelope === null || (silentScanEnvelope.ok && silentScanEnvelope.data !== undefined)
         ? null
         : ensureRpcError(silentScanEnvelope.error, "failed to refresh silent series status"),
+  };
+}
+
+function buildSeriesListRequestForCollection(
+  collection: SeriesCollection,
+  query: string,
+) {
+  const baseRequest = buildDefaultSeriesListRequest();
+
+  return {
+    ...baseRequest,
+    query,
+    includeArchived: collection === "archived",
+    limit: collection === "archived" ? ARCHIVED_COLLECTION_LIMIT : baseRequest.limit,
+  };
+}
+
+function filterSeriesListDataForCollection(
+  collection: SeriesCollection,
+  seriesListData: SeriesListData,
+): SeriesListData {
+  return {
+    ...seriesListData,
+    items:
+      collection === "archived"
+        ? seriesListData.items.filter((item) => item.status === "archived")
+        : seriesListData.items.filter((item) => item.status !== "archived"),
   };
 }
 

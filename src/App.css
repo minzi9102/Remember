@@ -117,6 +117,13 @@ button {
   margin-bottom: 16px;
 }
 
+.list-heading-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
 .panel-hint {
   margin: 0;
   max-width: 360px;
@@ -132,8 +139,50 @@ button {
   gap: 10px;
 }
 
+.timeline-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .timeline-hint {
   max-width: 240px;
+}
+
+.collection-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  background: rgba(255, 247, 237, 0.92);
+  border: 1px solid #fdba74;
+  padding: 4px;
+}
+
+.collection-toggle-button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #9a3412;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 12px;
+}
+
+.collection-toggle-button.is-active {
+  background: #b45309;
+  color: #fff7ed;
+}
+
+.collection-toggle-button:hover,
+.collection-toggle-button:focus-visible {
+  outline: none;
+  background: rgba(180, 83, 9, 0.12);
+}
+
+.collection-toggle-button.is-active:hover,
+.collection-toggle-button.is-active:focus-visible {
+  background: #92400e;
 }
 
 .series-list,
@@ -187,6 +236,21 @@ button {
   box-shadow: 0 14px 28px rgba(87, 83, 78, 0.14);
 }
 
+.series-row.is-archived {
+  border-color: #cbd5e1;
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+}
+
+.series-row.is-archived .series-select-button {
+  opacity: 0.88;
+}
+
+.series-row.is-archived.is-selected {
+  border-color: #60a5fa;
+  background: linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%);
+  box-shadow: 0 14px 28px rgba(59, 130, 246, 0.14);
+}
+
 .series-select-button,
 .series-open-button,
 .back-button {
@@ -238,6 +302,12 @@ button {
   letter-spacing: 0.04em;
   padding: 2px 8px;
   text-transform: uppercase;
+}
+
+.series-status-badge.archived {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .series-excerpt {
@@ -490,6 +560,10 @@ button {
     align-items: stretch;
   }
 
+  .list-heading-actions {
+    align-items: stretch;
+  }
+
   .series-open-button,
   .back-button,
   .back-button.ghost {
@@ -500,5 +574,14 @@ button {
 
   .timeline-error-actions {
     flex-direction: column;
+  }
+
+  .collection-toggle {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .collection-toggle-button {
+    flex: 1 1 0;
   }
 }

@@ -1,0 +1,17 @@
+case_id: P4-T6-VG-FAIL
+target_mode: web_url
+env_id: ENV-SQLITE
+run_date: 20260318
+steps -> visible result -> conclusion
+
+1. 打开 `http://127.0.0.1:3000/?runtime_mode=sqlite_only&mock_session=p4t6-vg-fail`。
+2. 将 `Project-A` 归档后切换到 `Archived`，先打开时间线确认仍无创建/提交入口。
+3. 返回归档列表，按下 `x` 触发写入尝试，确认出现 `ARCHIVE_READ_ONLY` 阻断反馈。
+4. 截图归档为 `qa-gates-codex/P4-T6-VG-FAIL_20260318_ENV-SQLITE_codex.png`。
+
+actual_result:
+- bannerText: `ARCHIVE_READ_ONLYarchived series are read-only; switch to Active to make changes`
+- writeBarsInArchivedList: `0`
+- writeBarsInArchivedTimeline: `0`
+
+conclusion: PASS

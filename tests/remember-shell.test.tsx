@@ -7,7 +7,7 @@ import { RememberShell } from "../src/ui/RememberShell";
 function buildShell(overrides?: Partial<ShellState>): ShellState {
   return {
     appTitle: "Remember",
-    subtitle: "Phase 4 Task 5 - Silent Detection",
+    subtitle: "Phase 4 Task 6 - Archived Read-only Timeline",
     layers: {
       adapter: "ready",
       application: "ready",
@@ -51,6 +51,7 @@ function buildShell(overrides?: Partial<ShellState>): ShellState {
       },
     },
     view: "series_list",
+    seriesCollection: "active",
     seriesList: [
       {
         id: "series-inbox",
@@ -70,6 +71,8 @@ function buildShell(overrides?: Partial<ShellState>): ShellState {
       },
     ],
     selectedSeriesId: "series-inbox",
+    activeSelectedSeriesId: "series-inbox",
+    archivedSelectedSeriesId: null,
     activeTimelineSeries: null,
     timelineLoadState: "idle",
     timelineItems: [],
@@ -90,6 +93,7 @@ function renderShellMarkup(shell: ShellState) {
   return renderToStaticMarkup(
     <RememberShell
       shell={shell}
+      onSelectCollection={noop}
       onSelectSeries={noop}
       onOpenTimeline={noop}
       onBackToList={noop}
@@ -109,6 +113,8 @@ describe("RememberShell list and timeline views", () => {
     expect(markup).toContain("Inbox");
     expect(markup).toContain("Silent");
     expect(markup).toContain("View timeline");
+    expect(markup).toContain("Active");
+    expect(markup).toContain("Archived");
     expect(markup).toContain("Startup Self-Heal");
     expect(markup).toContain("No unresolved startup alerts.");
   });
@@ -180,6 +186,34 @@ describe("RememberShell list and timeline views", () => {
     expect(markup).toContain("Read-only timeline");
   });
 
+  it("renders archived list state with archived badges and readonly hint", () => {
+    const markup = renderShellMarkup(
+      buildShell({
+        seriesCollection: "archived",
+        seriesList: [
+          {
+            id: "series-archive",
+            name: "Archive",
+            status: "archived",
+            lastUpdatedAt: "2026-03-17T00:00:00Z",
+            latestExcerpt: "frozen note",
+            createdAt: "2026-03-15T00:00:00Z",
+            archivedAt: "2026-03-17T00:00:00Z",
+          },
+        ],
+        selectedSeriesId: "series-archive",
+        activeSelectedSeriesId: "series-inbox",
+        archivedSelectedSeriesId: "series-archive",
+      }),
+    );
+
+    expect(markup).toContain("Archived Series");
+    expect(markup).toContain("Archived");
+    expect(markup).toContain("Archived series stay read-only.");
+    expect(markup).not.toContain("Create a new series");
+    expect(markup).not.toContain("Append commit to");
+  });
+
   it("renders the series empty state", () => {
     const markup = renderShellMarkup(
       buildShell({
@@ -190,6 +224,21 @@ describe("RememberShell list and timeline views", () => {
 
     expect(markup).toContain("No series yet");
     expect(markup).toContain("series.list");
+  });
+
+  it("renders the archived empty state", () => {
+    const markup = renderShellMarkup(
+      buildShell({
+        seriesCollection: "archived",
+        seriesList: [],
+        selectedSeriesId: null,
+        activeSelectedSeriesId: "series-inbox",
+        archivedSelectedSeriesId: null,
+      }),
+    );
+
+    expect(markup).toContain("No archived series");
+    expect(markup).toContain("press `a` on a silent series");
   });
 
   it("renders the timeline error state", () => {
@@ -262,6 +311,39 @@ describe("RememberShell list and timeline views", () => {
     expect(markup).toContain("ARCHIVE_DISABLED");
     expect(markup).toContain("only silent series can be archived with `a`");
     expect(markup).toContain("Archiving the selected silent series...");
+  });
+
+  it("renders archived timeline badges", () => {
+    const markup = renderShellMarkup(
+      buildShell({
+        view: "timeline",
+        seriesCollection: "archived",
+        activeTimelineSeries: {
+          id: "series-archive",
+          name: "Archive",
+          status: "archived",
+          lastUpdatedAt: "2026-03-17T00:00:00Z",
+          latestExcerpt: "frozen note",
+          createdAt: "2026-03-15T00:00:00Z",
+          archivedAt: "2026-03-17T00:00:00Z",
+        },
+        selectedSeriesId: "series-archive",
+        activeSelectedSeriesId: "series-inbox",
+        archivedSelectedSeriesId: "series-archive",
+        timelineLoadState: "ready",
+        timelineItems: [
+          {
+            id: "commit-archive-1",
+            seriesId: "series-archive",
+            content: "frozen note",
+            createdAt: "2026-03-16T00:00:00Z",
+          },
+        ],
+      }),
+    );
+
+    expect(markup).toContain("Archived timeline is read-only");
+    expect(markup).toContain('data-testid="timeline-archived-badge"');
   });
 
   it("renders silent rows with a visual status marker", () => {

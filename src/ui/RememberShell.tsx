@@ -1,13 +1,14 @@
 import type { RefObject } from "react";
 
 import { findSeriesById } from "../application/shell-view-model";
-import type { CommitItem, ShellState } from "../application/types";
+import type { CommitItem, SeriesCollection, ShellState } from "../application/types";
 
 interface RememberShellProps {
   shell: ShellState;
   searchInputRef?: RefObject<HTMLInputElement | null>;
   createSeriesInputRef?: RefObject<HTMLInputElement | null>;
   commitInputRef?: RefObject<HTMLInputElement | null>;
+  onSelectCollection: (collection: SeriesCollection) => void;
   onSelectSeries: (seriesId: string) => void;
   onOpenTimeline: (seriesId: string) => void;
   onBackToList: () => void;
@@ -33,6 +34,7 @@ export function RememberShell({
   searchInputRef,
   createSeriesInputRef,
   commitInputRef,
+  onSelectCollection,
   onSelectSeries,
   onOpenTimeline,
   onBackToList,
@@ -43,6 +45,12 @@ export function RememberShell({
 }: RememberShellProps) {
   const startupSelfHeal = shell.commandProbe.envelope.meta.startupSelfHeal;
   const selectedSeries = findSeriesById(shell.seriesList, shell.selectedSeriesId);
+  const isArchivedCollection = shell.seriesCollection === "archived";
+  const timelineIsArchived = shell.activeTimelineSeries?.status === "archived";
+  const listHeadingTitle = isArchivedCollection ? "Archived Series" : "Active Series";
+  const listHint = isArchivedCollection
+    ? "`↑/↓` select, `→` opens timeline, `/` searches. Archived series stay read-only."
+    : "`↑/↓` select, `→` opens timeline, `/` searches, `Shift+N` creates, `a` archives silent, type to capture.";
 
   return (
     <main className="remember-shell" data-testid="remember-shell">
@@ -66,12 +74,31 @@ export function RememberShell({
             <div className="panel-heading">
               <div>
                 <p className="panel-kicker">Level 1</p>
-                <h2>Series</h2>
+                <h2>{listHeadingTitle}</h2>
               </div>
-              <p className="panel-hint">
-                `↑/↓` select, `→` opens timeline, `/` searches, `Shift+N` creates, `a` archives
-                silent, type to capture.
-              </p>
+              <div className="list-heading-actions">
+                <div className="collection-toggle" data-testid="series-collection-toggle">
+                  <button
+                    type="button"
+                    className={`collection-toggle-button${!isArchivedCollection ? " is-active" : ""}`}
+                    data-testid="series-collection-active-button"
+                    aria-pressed={!isArchivedCollection}
+                    onClick={() => onSelectCollection("active")}
+                  >
+                    Active
+                  </button>
+                  <button
+                    type="button"
+                    className={`collection-toggle-button${isArchivedCollection ? " is-active" : ""}`}
+                    data-testid="series-collection-archived-button"
+                    aria-pressed={isArchivedCollection}
+                    onClick={() => onSelectCollection("archived")}
+                  >
+                    Archived
+                  </button>
+                </div>
+                <p className="panel-hint">{listHint}</p>
+              </div>
             </div>
 
             {shell.navigationError !== null ? (
@@ -112,7 +139,7 @@ export function RememberShell({
               </div>
             ) : null}
 
-            {shell.interactionMode === "create_series" ? (
+            {!isArchivedCollection && shell.interactionMode === "create_series" ? (
               <div className="command-surface" data-testid="create-series-command-bar">
                 <label className="command-label" htmlFor="series-create-input">
                   Create a new series
@@ -139,19 +166,24 @@ export function RememberShell({
 
             {shell.seriesList.length === 0 ? (
               <div className="empty-state" data-testid="series-empty-state">
-                <h3>No series yet</h3>
-                <p>The list will appear here after `series.list` returns data.</p>
+                <h3>{isArchivedCollection ? "No archived series" : "No series yet"}</h3>
+                <p>
+                  {isArchivedCollection
+                    ? "Archived series appear here after you press `a` on a silent series."
+                    : "The list will appear here after `series.list` returns data."}
+                </p>
               </div>
             ) : (
               <ul className="series-list" aria-label="Series list">
                 {shell.seriesList.map((item) => {
                   const isSelected = item.id === shell.selectedSeriesId;
                   const isSilent = item.status === "silent";
+                  const isArchived = item.status === "archived";
 
                   return (
                     <li
                       key={item.id}
-                      className={`series-row${isSelected ? " is-selected" : ""}${isSilent ? " is-silent" : ""}`}
+                      className={`series-row${isSelected ? " is-selected" : ""}${isSilent ? " is-silent" : ""}${isArchived ? " is-archived" : ""}`}
                       data-testid={`series-row-${item.id}`}
                     >
                       <button
@@ -166,6 +198,11 @@ export function RememberShell({
                           {isSilent ? (
                             <span className="series-status-badge" data-testid={`series-status-${item.id}`}>
                               Silent
+                            </span>
+                          ) : null}
+                          {isArchived ? (
+                            <span className="series-status-badge archived" data-testid={`series-status-${item.id}`}>
+                              Archived
                             </span>
                           ) : null}
                         </span>
@@ -188,7 +225,7 @@ export function RememberShell({
               </ul>
             )}
 
-            {shell.interactionMode === "draft_commit" ? (
+            {!isArchivedCollection && shell.interactionMode === "draft_commit" ? (
               <div className="command-surface command-surface-compose" data-testid="commit-draft-command-bar">
                 <label className="command-label" htmlFor="commit-draft-input">
                   Append commit to {selectedSeries?.name ?? "the selected series"}
@@ -224,10 +261,21 @@ export function RememberShell({
             <div className="panel-heading">
               <div>
                 <p className="panel-kicker">Level 2</p>
-                <h2>{shell.activeTimelineSeries?.name ?? "Timeline"}</h2>
+                <div className="timeline-title-row">
+                  <h2>{shell.activeTimelineSeries?.name ?? "Timeline"}</h2>
+                  {timelineIsArchived ? (
+                    <span className="series-status-badge archived" data-testid="timeline-archived-badge">
+                      Archived
+                    </span>
+                  ) : null}
+                </div>
               </div>
               <div className="timeline-heading-actions">
-                <p className="panel-hint timeline-hint">Read-only timeline. `←` or `Esc` returns.</p>
+                <p className="panel-hint timeline-hint">
+                  {timelineIsArchived
+                    ? "Archived timeline is read-only. `←` or `Esc` returns."
+                    : "Read-only timeline. `←` or `Esc` returns."}
+                </p>
                 <button
                   type="button"
                   className="back-button"
@@ -387,7 +435,7 @@ export function RememberShell({
 
       {shell.view === "series_list" && selectedSeries !== null ? (
         <p className="selection-footer" data-testid="selection-footer">
-          Selected series: {selectedSeries.name}
+          Selected {isArchivedCollection ? "archived" : "active"} series: {selectedSeries.name}
         </p>
       ) : null}
     </main>

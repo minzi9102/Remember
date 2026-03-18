@@ -73,7 +73,10 @@ describe("shell view model", () => {
     const state = buildInitialShellState(buildSnapshot(), buildSeriesList(), null);
 
     expect(state.view).toBe("series_list");
+    expect(state.seriesCollection).toBe("active");
     expect(state.selectedSeriesId).toBe("series-inbox");
+    expect(state.activeSelectedSeriesId).toBe("series-inbox");
+    expect(state.archivedSelectedSeriesId).toBeNull();
     expect(state.timelineLoadState).toBe("idle");
     expect(state.interactionMode).toBe("browse");
     expect(state.pendingAction).toBeNull();
@@ -169,6 +172,7 @@ describe("shell view model", () => {
     });
     const replaced = shellReducer(selected, {
       type: "series.list.replaced",
+      collection: "active",
       seriesList: [
         {
           id: "series-inbox",
@@ -224,12 +228,90 @@ describe("shell view model", () => {
     const initial = buildInitialShellState(buildSnapshot(), buildSeriesList(), null);
     const replaced = shellReducer(initial, {
       type: "series.list.replaced",
+      collection: "active",
       seriesList: buildSeriesList(),
       navigationError: null,
       preferredSeriesId: "series-project-a",
     });
 
     expect(replaced.selectedSeriesId).toBe("series-project-a");
+  });
+
+  it("keeps independent selections for active and archived collections", () => {
+    const initial = buildInitialShellState(buildSnapshot(), buildSeriesList(), null);
+    const selectedActive = shellReducer(initial, {
+      type: "series.selected",
+      seriesId: "series-project-a",
+    });
+    const archivedList = shellReducer(selectedActive, {
+      type: "series.list.replaced",
+      collection: "archived",
+      seriesList: [
+        {
+          id: "series-archive",
+          name: "Archive",
+          status: "archived",
+          lastUpdatedAt: "2026-03-17T00:00:00Z",
+          latestExcerpt: "frozen note",
+          createdAt: "2026-03-15T00:00:00Z",
+          archivedAt: "2026-03-17T00:00:00Z",
+        },
+      ],
+      navigationError: null,
+    });
+    const backToActive = shellReducer(archivedList, {
+      type: "series.list.replaced",
+      collection: "active",
+      seriesList: buildSeriesList(),
+      navigationError: null,
+    });
+
+    expect(archivedList.seriesCollection).toBe("archived");
+    expect(archivedList.selectedSeriesId).toBe("series-archive");
+    expect(archivedList.activeSelectedSeriesId).toBe("series-project-a");
+    expect(archivedList.archivedSelectedSeriesId).toBe("series-archive");
+    expect(backToActive.seriesCollection).toBe("active");
+    expect(backToActive.selectedSeriesId).toBe("series-project-a");
+  });
+
+  it("returns to the archived collection after closing an archived timeline", () => {
+    const initial = buildInitialShellState(buildSnapshot(), buildSeriesList(), null);
+    const archivedList = shellReducer(initial, {
+      type: "series.list.replaced",
+      collection: "archived",
+      seriesList: [
+        {
+          id: "series-archive",
+          name: "Archive",
+          status: "archived",
+          lastUpdatedAt: "2026-03-17T00:00:00Z",
+          latestExcerpt: "frozen note",
+          createdAt: "2026-03-15T00:00:00Z",
+          archivedAt: "2026-03-17T00:00:00Z",
+        },
+      ],
+      navigationError: null,
+    });
+    const opening = shellReducer(archivedList, {
+      type: "timeline.requested",
+      seriesId: "series-archive",
+    });
+    const loaded = shellReducer(opening, {
+      type: "timeline.loaded",
+      seriesId: "series-archive",
+      items: [
+        {
+          id: "commit-archive-1",
+          seriesId: "series-archive",
+          content: "frozen note",
+          createdAt: "2026-03-16T00:00:00Z",
+        },
+      ],
+    });
+    const closed = shellReducer(loaded, { type: "timeline.closed" });
+
+    expect(closed.seriesCollection).toBe("archived");
+    expect(closed.selectedSeriesId).toBe("series-archive");
   });
 
   it("surfaces an initial interaction warning when silent scan fails", () => {

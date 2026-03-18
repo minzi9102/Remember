@@ -316,6 +316,40 @@ describe("runtime-adapter typed helpers", () => {
     });
   });
 
+  it("keeps archived series out of the active list while exposing them through includeArchived", () => {
+    const search = withMockSession("?runtime_mode=sqlite_only");
+
+    const archived = readMockArchiveSeries(search, "series-project-a");
+    const activeList = readMockSeriesList(search, buildDefaultSeriesListRequest());
+    const allSeries = readMockSeriesList(search, {
+      ...buildDefaultSeriesListRequest(),
+      includeArchived: true,
+    });
+
+    expect(archived.ok).toBe(true);
+    expect(activeList.data?.items.some((item) => item.id === "series-project-a")).toBe(false);
+    expect(allSeries.data?.items.find((item) => item.id === "series-project-a")).toMatchObject({
+      status: "archived",
+      archivedAt: "2026-03-16T12:00:00Z",
+    });
+  });
+
+  it("returns archived series in includeArchived searches", () => {
+    const search = withMockSession("?runtime_mode=sqlite_only");
+
+    readMockArchiveSeries(search, "series-project-a");
+    const archivedSearch = readMockSeriesList(search, {
+      ...buildDefaultSeriesListRequest(),
+      includeArchived: true,
+      query: "Project",
+    });
+
+    expect(archivedSearch.ok).toBe(true);
+    expect(archivedSearch.data?.items.find((item) => item.id === "series-project-a")).toMatchObject({
+      status: "archived",
+    });
+  });
+
   it("returns forced error for archive helper", () => {
     const envelope = readMockArchiveSeries(
       withMockSession("?runtime_mode=dual_sync&rpc_error=dual_write_failed"),
@@ -392,6 +426,21 @@ describe("runtime-adapter typed helpers", () => {
         content: "first-project-note",
       },
     ]);
+  });
+
+  it("keeps archived timelines readable after archiving in the same mock session", () => {
+    const search = withMockSession("?runtime_mode=sqlite_only");
+
+    const archived = readMockArchiveSeries(search, "series-project-a");
+    const timeline = readMockTimeline(search, "series-project-a", buildDefaultTimelineRequest());
+
+    expect(archived.ok).toBe(true);
+    expect(timeline.ok).toBe(true);
+    expect(timeline.data?.items).toHaveLength(2);
+    expect(timeline.data?.items[0]).toMatchObject({
+      id: "stub-commit-002",
+      content: "follow-up-note",
+    });
   });
 
   it("keeps created series and latest commit excerpt in the same mock session", () => {

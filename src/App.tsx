@@ -3,16 +3,14 @@ import { startTransition, useEffect, useEffectEvent, useReducer, useRef } from "
 import {
   appendCommit,
   archiveSeries,
-  buildDefaultSeriesListRequest,
   buildDefaultTimelineRequest,
   createSeries,
-  loadSeriesList,
   loadTimeline,
 } from "./adapter/runtime-adapter";
-import { bootstrapShell, loadSilentAwareSeriesList } from "./application/bootstrap";
+import { bootstrapShell, loadSeriesCollection } from "./application/bootstrap";
 import { interpretShellKeyboardEvent } from "./application/shell-shortcuts";
 import { shellReducer, type ShellAction } from "./application/shell-view-model";
-import type { RpcError, ShellState } from "./application/types";
+import type { RpcError, SeriesCollection, ShellState } from "./application/types";
 import { RememberShell, RememberShellLoading } from "./ui/RememberShell";
 import "./App.css";
 
@@ -90,6 +88,7 @@ function App() {
       return;
     }
 
+    const collection = shell.seriesCollection;
     const requestId = latestSearchRequestIdRef.current + 1;
     latestSearchRequestIdRef.current = requestId;
 
@@ -100,10 +99,7 @@ function App() {
       });
     });
 
-    const envelope = await loadSeriesList({
-      ...buildDefaultSeriesListRequest(),
-      query,
-    });
+    const result = await loadSeriesCollection(collection, { query });
 
     if (requestId !== latestSearchRequestIdRef.current) {
       return;
@@ -116,31 +112,36 @@ function App() {
       });
     });
 
-    if (!envelope.ok || envelope.data === undefined) {
+    if (result.seriesListData === null) {
       startTransition(() => {
         dispatch({
           type: "interaction.feedback.set",
-          feedback: resolveRpcError(envelope.error, "failed to filter the series list"),
+          feedback: result.seriesListError ?? {
+            code: "INVOKE_FAILED",
+            message: "failed to filter the series list",
+          },
         });
       });
       return;
     }
 
-    const seriesList = envelope.data.items;
+    const seriesListData = result.seriesListData;
 
     startTransition(() => {
       dispatch({
         type: "series.list.replaced",
-        seriesList,
+        collection,
+        seriesList: seriesListData.items,
         navigationError: null,
-        preferredSeriesId: shell.selectedSeriesId,
+        preferredSeriesId: getStoredSelectionId(shell, collection),
       });
     });
   });
 
-  const refreshSeriesList = useEffectEvent(
+  const refreshActiveSeriesList = useEffectEvent(
     async (preferredSeriesId: string | null, feedbackMessage: string) => {
-      const result = await loadSilentAwareSeriesList();
+      latestSearchRequestIdRef.current += 1;
+      const result = await loadSeriesCollection("active", { refreshSilent: true });
 
       if (result.seriesListData === null) {
         startTransition(() => {
@@ -160,6 +161,7 @@ function App() {
       startTransition(() => {
         dispatch({
           type: "series.list.replaced",
+          collection: "active",
           seriesList: seriesListData.items,
           navigationError: null,
           preferredSeriesId,
@@ -180,6 +182,57 @@ function App() {
       return true;
     },
   );
+
+  const handleSelectSeriesCollection = useEffectEvent(async (collection: SeriesCollection) => {
+    if (shell === null || shell.seriesCollection === collection) {
+      return;
+    }
+
+    latestSearchRequestIdRef.current += 1;
+
+    startTransition(() => {
+      dispatch({ type: "interaction.cancelled" });
+    });
+
+    const result = await loadSeriesCollection(collection, {
+      refreshSilent: collection === "active",
+    });
+
+    if (result.seriesListData === null) {
+      startTransition(() => {
+        dispatch({
+          type: "interaction.feedback.set",
+          feedback: result.seriesListError ?? {
+            code: "INVOKE_FAILED",
+            message: `failed to open the ${collection} series view`,
+          },
+        });
+      });
+      return;
+    }
+
+    const seriesListData = result.seriesListData;
+
+    startTransition(() => {
+      dispatch({
+        type: "series.list.replaced",
+        collection,
+        seriesList: seriesListData.items,
+        navigationError: null,
+      });
+    });
+
+    startTransition(() => {
+      dispatch(
+        result.silentScanError === null
+          ? { type: "interaction.feedback.cleared" }
+          : {
+              type: "interaction.feedback.set",
+              feedback: result.silentScanError,
+            },
+      );
+    });
+  });
 
   const handleOpenTimeline = useEffectEvent(async (seriesId: string) => {
     startTransition(() => {
@@ -212,6 +265,16 @@ function App() {
 
   const submitCreateSeries = useEffectEvent(async () => {
     if (shell === null) {
+      return;
+    }
+
+    if (shell.seriesCollection === "archived") {
+      startTransition(() => {
+        dispatch({
+          type: "interaction.feedback.set",
+          feedback: buildArchiveReadOnlyFeedback(),
+        });
+      });
       return;
     }
 
@@ -261,7 +324,7 @@ function App() {
       dispatch({ type: "interaction.cancelled" });
     });
 
-    const refreshed = await refreshSeriesList(
+    const refreshed = await refreshActiveSeriesList(
       createdSeriesId,
       "series was created, but the list failed to refresh",
     );
@@ -277,6 +340,16 @@ function App() {
 
   const submitCommitDraft = useEffectEvent(async () => {
     if (shell === null) {
+      return;
+    }
+
+    if (shell.seriesCollection === "archived") {
+      startTransition(() => {
+        dispatch({
+          type: "interaction.feedback.set",
+          feedback: buildArchiveReadOnlyFeedback(),
+        });
+      });
       return;
     }
 
@@ -341,7 +414,7 @@ function App() {
       dispatch({ type: "interaction.cancelled" });
     });
 
-    await refreshSeriesList(
+    await refreshActiveSeriesList(
       shell.selectedSeriesId,
       "commit was saved, but the list failed to refresh",
     );
@@ -349,6 +422,16 @@ function App() {
 
   const archiveSelectedSeries = useEffectEvent(async () => {
     if (shell === null) {
+      return;
+    }
+
+    if (shell.seriesCollection === "archived") {
+      startTransition(() => {
+        dispatch({
+          type: "interaction.feedback.set",
+          feedback: buildArchiveReadOnlyFeedback(),
+        });
+      });
       return;
     }
 
@@ -406,8 +489,8 @@ function App() {
       return;
     }
 
-    await refreshSeriesList(
-      shell.selectedSeriesId,
+    await refreshActiveSeriesList(
+      pickAdjacentSeriesId(shell.seriesList, shell.selectedSeriesId),
       "series was archived, but the list failed to refresh",
     );
   });
@@ -519,6 +602,9 @@ function App() {
       searchInputRef={searchInputRef}
       createSeriesInputRef={createSeriesInputRef}
       commitInputRef={commitInputRef}
+      onSelectCollection={(collection) => {
+        void handleSelectSeriesCollection(collection);
+      }}
       onSelectSeries={(seriesId) => {
         startTransition(() => {
           dispatch({ type: "series.selected", seriesId });
@@ -580,6 +666,36 @@ function isEditableTarget(target: EventTarget | null): boolean {
     target instanceof HTMLTextAreaElement ||
     target instanceof HTMLSelectElement
   );
+}
+
+function pickAdjacentSeriesId(
+  seriesList: ShellState["seriesList"],
+  selectedSeriesId: string | null,
+): string | null {
+  if (selectedSeriesId === null) {
+    return null;
+  }
+
+  const selectedIndex = seriesList.findIndex((item) => item.id === selectedSeriesId);
+  if (selectedIndex === -1) {
+    return null;
+  }
+
+  return seriesList[selectedIndex + 1]?.id ?? seriesList[selectedIndex - 1]?.id ?? null;
+}
+
+function getStoredSelectionId(
+  shell: Pick<ShellState, "activeSelectedSeriesId" | "archivedSelectedSeriesId">,
+  collection: SeriesCollection,
+): string | null {
+  return collection === "active" ? shell.activeSelectedSeriesId : shell.archivedSelectedSeriesId;
+}
+
+function buildArchiveReadOnlyFeedback(): RpcError {
+  return {
+    code: "ARCHIVE_READ_ONLY",
+    message: "archived series are read-only; switch to Active to make changes",
+  };
 }
 
 export default App;

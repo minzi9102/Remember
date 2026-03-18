@@ -3,6 +3,7 @@ import type {
   CommitItem,
   PendingShellAction,
   RpcError,
+  SeriesCollection,
   SeriesSummary,
   ShellState,
 } from "./types";
@@ -10,6 +11,7 @@ import type {
 export type ShellAction =
   | {
       type: "series.list.replaced";
+      collection: SeriesCollection;
       seriesList: SeriesSummary[];
       navigationError: RpcError | null;
       preferredSeriesId?: string | null;
@@ -84,7 +86,7 @@ export function buildInitialShellState(
 ): ShellState {
   return {
     appTitle: "Remember",
-    subtitle: "Phase 4 Task 5 - Silent Detection",
+    subtitle: "Phase 4 Task 6 - Archived Read-only Timeline",
     layers: {
       adapter: snapshot.adapter,
       application: "ready",
@@ -93,8 +95,11 @@ export function buildInitialShellState(
     runtimeStatus: snapshot.runtimeStatus,
     commandProbe: snapshot.commandProbe,
     view: "series_list",
+    seriesCollection: "active",
     seriesList,
     selectedSeriesId: pickSelectedSeriesId(seriesList, null),
+    activeSelectedSeriesId: pickSelectedSeriesId(seriesList, null),
+    archivedSelectedSeriesId: null,
     activeTimelineSeries: null,
     timelineLoadState: "idle",
     timelineItems: [],
@@ -111,20 +116,25 @@ export function buildInitialShellState(
 export function shellReducer(state: ShellState, action: ShellAction): ShellState {
   switch (action.type) {
     case "series.list.replaced": {
+      const preferredSeriesId =
+        action.preferredSeriesId ?? getStoredSelectedSeriesId(state, action.collection);
       const nextSelectedSeriesId = pickSelectedSeriesId(
         action.seriesList,
-        action.preferredSeriesId ?? state.selectedSeriesId,
+        preferredSeriesId,
       );
-      const activeTimelineSeries = state.activeTimelineSeries
-        ? findSeriesById(action.seriesList, state.activeTimelineSeries.id)
-        : null;
+      const activeTimelineSeries =
+        state.seriesCollection === action.collection && state.activeTimelineSeries !== null
+          ? findSeriesById(action.seriesList, state.activeTimelineSeries.id)
+          : state.activeTimelineSeries;
 
       if (state.view === "timeline" && activeTimelineSeries === null) {
         return {
           ...state,
           view: "series_list",
+          seriesCollection: action.collection,
           seriesList: action.seriesList,
           selectedSeriesId: nextSelectedSeriesId,
+          ...applyCollectionSelection(state, action.collection, nextSelectedSeriesId),
           activeTimelineSeries: null,
           timelineLoadState: "idle",
           timelineItems: [],
@@ -136,8 +146,10 @@ export function shellReducer(state: ShellState, action: ShellAction): ShellState
 
       return {
         ...state,
+        seriesCollection: action.collection,
         seriesList: action.seriesList,
         selectedSeriesId: nextSelectedSeriesId,
+        ...applyCollectionSelection(state, action.collection, nextSelectedSeriesId),
         activeTimelineSeries,
         navigationError: action.navigationError,
       };
@@ -150,19 +162,25 @@ export function shellReducer(state: ShellState, action: ShellAction): ShellState
       return {
         ...state,
         selectedSeriesId: action.seriesId,
+        ...applyCollectionSelection(state, state.seriesCollection, action.seriesId),
         interactionFeedback: null,
       };
     }
     case "series.selection.moved":
-      return {
-        ...state,
-        selectedSeriesId: moveSelectedSeriesId(
+      {
+        const nextSelectedSeriesId = moveSelectedSeriesId(
           state.seriesList,
           state.selectedSeriesId,
           action.direction,
-        ),
-        interactionFeedback: null,
-      };
+        );
+
+        return {
+          ...state,
+          selectedSeriesId: nextSelectedSeriesId,
+          ...applyCollectionSelection(state, state.seriesCollection, nextSelectedSeriesId),
+          interactionFeedback: null,
+        };
+      }
     case "timeline.requested": {
       const series = findSeriesById(state.seriesList, action.seriesId);
       if (series === null) {
@@ -173,6 +191,7 @@ export function shellReducer(state: ShellState, action: ShellAction): ShellState
         ...state,
         view: "timeline",
         selectedSeriesId: series.id,
+        ...applyCollectionSelection(state, state.seriesCollection, series.id),
         activeTimelineSeries: series,
         timelineLoadState: "loading",
         timelineItems: [],
@@ -318,6 +337,31 @@ function pickSelectedSeriesId(
   }
 
   return seriesList[0]?.id ?? null;
+}
+
+function getStoredSelectedSeriesId(
+  state: Pick<ShellState, "activeSelectedSeriesId" | "archivedSelectedSeriesId">,
+  collection: SeriesCollection,
+): string | null {
+  return collection === "active" ? state.activeSelectedSeriesId : state.archivedSelectedSeriesId;
+}
+
+function applyCollectionSelection(
+  state: Pick<ShellState, "activeSelectedSeriesId" | "archivedSelectedSeriesId">,
+  collection: SeriesCollection,
+  selectedSeriesId: string | null,
+): Pick<ShellState, "activeSelectedSeriesId" | "archivedSelectedSeriesId"> {
+  if (collection === "active") {
+    return {
+      activeSelectedSeriesId: selectedSeriesId,
+      archivedSelectedSeriesId: state.archivedSelectedSeriesId,
+    };
+  }
+
+  return {
+    activeSelectedSeriesId: state.activeSelectedSeriesId,
+    archivedSelectedSeriesId: selectedSeriesId,
+  };
 }
 
 function moveSelectedSeriesId(

@@ -6,7 +6,7 @@ import type { ShellState } from "../src/application/types";
 function buildShell(overrides?: Partial<ShellState>): ShellState {
   return {
     appTitle: "Remember",
-    subtitle: "Phase 4 Task 5 - Silent Detection",
+    subtitle: "Phase 4 Task 6 - Archived Read-only Timeline",
     layers: {
       adapter: "ready",
       application: "ready",
@@ -50,6 +50,7 @@ function buildShell(overrides?: Partial<ShellState>): ShellState {
       },
     },
     view: "series_list",
+    seriesCollection: "active",
     seriesList: [
       {
         id: "series-inbox",
@@ -69,6 +70,8 @@ function buildShell(overrides?: Partial<ShellState>): ShellState {
       },
     ],
     selectedSeriesId: "series-inbox",
+    activeSelectedSeriesId: "series-inbox",
+    archivedSelectedSeriesId: null,
     activeTimelineSeries: null,
     timelineLoadState: "idle",
     timelineItems: [],
@@ -171,6 +174,52 @@ describe("shell keyboard shortcuts", () => {
     });
   });
 
+  it("allows search and timeline open in the archived collection", () => {
+    expect(
+      interpretShellKeyboardEvent(
+        buildShell({
+          seriesCollection: "archived",
+          seriesList: [
+            {
+              id: "series-archive",
+              name: "Archive",
+              status: "archived",
+              lastUpdatedAt: "2026-03-16T00:00:00Z",
+              latestExcerpt: "frozen note",
+              createdAt: "2026-03-15T00:00:00Z",
+              archivedAt: "2026-03-17T00:00:00Z",
+            },
+          ],
+          selectedSeriesId: "series-archive",
+          archivedSelectedSeriesId: "series-archive",
+        }),
+        buildKeyboardEvent({ key: "/" }),
+      ),
+    ).toEqual({ type: "open_search" });
+
+    expect(
+      interpretShellKeyboardEvent(
+        buildShell({
+          seriesCollection: "archived",
+          seriesList: [
+            {
+              id: "series-archive",
+              name: "Archive",
+              status: "archived",
+              lastUpdatedAt: "2026-03-16T00:00:00Z",
+              latestExcerpt: "frozen note",
+              createdAt: "2026-03-15T00:00:00Z",
+              archivedAt: "2026-03-17T00:00:00Z",
+            },
+          ],
+          selectedSeriesId: "series-archive",
+          archivedSelectedSeriesId: "series-archive",
+        }),
+        buildKeyboardEvent({ key: "ArrowRight" }),
+      ),
+    ).toEqual({ type: "open_timeline" });
+  });
+
   it("submits create series from create mode", () => {
     const intent = interpretShellKeyboardEvent(
       buildShell({
@@ -221,6 +270,55 @@ describe("shell keyboard shortcuts", () => {
       feedback: {
         code: "ARCHIVE_DISABLED",
         message: "only silent series can be archived with `a`",
+      },
+    });
+  });
+
+  it("blocks write shortcuts in the archived collection", () => {
+    const shell = buildShell({
+      seriesCollection: "archived",
+      seriesList: [
+        {
+          id: "series-archive",
+          name: "Archive",
+          status: "archived",
+          lastUpdatedAt: "2026-03-16T00:00:00Z",
+          latestExcerpt: "frozen note",
+          createdAt: "2026-03-15T00:00:00Z",
+          archivedAt: "2026-03-17T00:00:00Z",
+        },
+      ],
+      selectedSeriesId: "series-archive",
+      archivedSelectedSeriesId: "series-archive",
+    });
+
+    expect(
+      interpretShellKeyboardEvent(shell, buildKeyboardEvent({ key: "a" })),
+    ).toEqual({
+      type: "blocked",
+      feedback: {
+        code: "ARCHIVE_READ_ONLY",
+        message: "archived series are read-only; switch to Active to make changes",
+      },
+    });
+
+    expect(
+      interpretShellKeyboardEvent(shell, buildKeyboardEvent({ key: "N", shiftKey: true })),
+    ).toEqual({
+      type: "blocked",
+      feedback: {
+        code: "ARCHIVE_READ_ONLY",
+        message: "archived series are read-only; switch to Active to make changes",
+      },
+    });
+
+    expect(
+      interpretShellKeyboardEvent(shell, buildKeyboardEvent({ key: "x" })),
+    ).toEqual({
+      type: "blocked",
+      feedback: {
+        code: "ARCHIVE_READ_ONLY",
+        message: "archived series are read-only; switch to Active to make changes",
       },
     });
   });

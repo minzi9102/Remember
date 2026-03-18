@@ -24,7 +24,7 @@
 | P4-T3 | phase-4/p4-t3-keyboard-shortcuts.md | ↑/↓/Enter/Esc/←/→//Shift+N/a | Phase 4 / 子任务 3 | 4 | BLOCKED |
 | P4-T4 | phase-4/p4-t4-submit-and-reorder.md | 提交后排序刷新 | Phase 4 / 子任务 4 | 4 | PASS |
 | P4-T5 | phase-4/p4-t5-silent-detection.md | series.scan_silent | Phase 4 / 子任务 5 | 4 | PASS |
-| P4-T6 | phase-4/p4-t6-archive-readonly.md | series.archive + timeline readonly | Phase 4 / 子任务 6 | 4 | TODO |
+| P4-T6 | phase-4/p4-t6-archive-readonly.md | series.archive + timeline readonly | Phase 4 / 子任务 6 | 4 | PASS |
 | P5-T1 | phase-5/p5-t1-full-regression.md | 三模式启动与读写 | Phase 5 / 子任务 1 | 4 | TODO |
 | P5-T2 | phase-5/p5-t2-dualwrite-fault-drill.md | dual_sync 失败/补偿 | Phase 5 / 子任务 2 | 4 | TODO |
 | P5-T3 | phase-5/p5-t3-performance-stability.md | 提交延迟/热键响应 | Phase 5 / 子任务 3 | 4 | TODO |

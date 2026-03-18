@@ -117,3 +117,15 @@ $env:PW_BROWSER = 'msedge'
 - source gate: `qa-gates/phase-4/p4-t6-archive-readonly.md`
 - DEV.md 映射: series.archive + timeline readonly
 - ROADMAP.md 映射: Phase 4 / 子任务 6
+
+## 2026-03-18 执行结果
+| case_id | result | evidence |
+|---|---|---|
+| `P4-T6-VG-PASS` | PASS | `qa-gates-codex/P4-T6-VG-PASS_20260318_ENV-SQLITE_codex.png` + `qa-gates-codex/P4-T6-VG-PASS_20260318_ENV-SQLITE_codex.txt` |
+| `P4-T6-VG-FAIL` | PASS | `qa-gates-codex/P4-T6-VG-FAIL_20260318_ENV-SQLITE_codex.png` + `qa-gates-codex/P4-T6-VG-FAIL_20260318_ENV-SQLITE_codex.txt` |
+| `P4-T6-IG-PASS` | PASS | `qa-gates-codex/P4-T6-IG-PASS_20260318_ENV-SQLITE_codex.mp4` + `qa-gates-codex/P4-T6-IG-PASS_20260318_ENV-SQLITE_codex.txt` |
+| `P4-T6-IG-FAIL` | PASS | `qa-gates-codex/P4-T6-IG-FAIL_20260318_ENV-SQLITE_codex.mp4` + `qa-gates-codex/P4-T6-IG-FAIL_20260318_ENV-SQLITE_codex.txt` |
+
+- target_mode: `web_url`
+- overall: `PASS`
+- note: the active collection now hides archived rows after `a`, while the new archived collection can reopen those rows into an explicitly read-only timeline and blocks write shortcuts with `ARCHIVE_READ_ONLY` until the user switches back to Active.

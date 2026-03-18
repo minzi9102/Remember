@@ -120,10 +120,18 @@ export function interpretShellKeyboardEvent(
   const lowerKey = event.key.toLowerCase();
 
   if (lowerKey === "n" && event.shiftKey) {
+    if (shell.seriesCollection === "archived") {
+      return buildArchiveReadOnlyIntent();
+    }
+
     return { type: "open_create_series" };
   }
 
   if (lowerKey === "a" && !event.shiftKey) {
+    if (shell.seriesCollection === "archived") {
+      return buildArchiveReadOnlyIntent();
+    }
+
     if (shell.selectedSeriesId === null) {
       return buildBlockedIntent("NO_SERIES_SELECTED", "select a series before archiving");
     }
@@ -137,6 +145,10 @@ export function interpretShellKeyboardEvent(
   }
 
   if (isPrintableKey(event.key)) {
+    if (shell.seriesCollection === "archived") {
+      return buildArchiveReadOnlyIntent();
+    }
+
     if (shell.selectedSeriesId === null) {
       return buildBlockedIntent("NO_SERIES_SELECTED", "select a series before writing a commit");
     }
@@ -180,4 +192,11 @@ function buildBlockedIntent(code: string, message: string): ShellKeyboardIntent 
       message,
     },
   };
+}
+
+function buildArchiveReadOnlyIntent(): ShellKeyboardIntent {
+  return buildBlockedIntent(
+    "ARCHIVE_READ_ONLY",
+    "archived series are read-only; switch to Active to make changes",
+  );
 }

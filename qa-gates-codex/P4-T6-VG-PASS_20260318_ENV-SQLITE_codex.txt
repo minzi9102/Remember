@@ -1,0 +1,18 @@
+case_id: P4-T6-VG-PASS
+target_mode: web_url
+env_id: ENV-SQLITE
+run_date: 20260318
+steps -> visible result -> conclusion
+
+1. 打开 `http://127.0.0.1:3000/?runtime_mode=sqlite_only&mock_session=p4t6-vg-pass`。
+2. 在 Active 视图选中沉寂的 `Project-A`，按下 `a`，确认该行从主列表隐藏。
+3. 切换到 `Archived` 视图，打开 `Project-A` 时间线，确认出现 `Archived` 徽标和只读提示。
+4. 截图归档为 `qa-gates-codex/P4-T6-VG-PASS_20260318_ENV-SQLITE_codex.png`。
+
+actual_result:
+- activeHidden: `true`
+- archivedBadge: `Archived`
+- timelineHint: `Archived timeline is read-only. \`←\` or \`Esc\` returns.`
+- timelineTitle: `Project-A`
+
+conclusion: PASS
