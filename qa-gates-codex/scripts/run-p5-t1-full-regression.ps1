@@ -210,8 +210,8 @@ function Wait-TempPostgresReady {
 }
 
 function Stop-TempPostgres {
-  docker inspect $containerName *> $null
-  if ($LASTEXITCODE -eq 0) {
+  $existing = docker ps -a --format '{{.Names}}' | Where-Object { $_ -eq $containerName }
+  if ($existing) {
     docker rm -f $containerName *> $null
   }
 }
