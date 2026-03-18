@@ -1,0 +1,23 @@
+case_id: P5-T1-IG-FAIL
+target_mode: desktop_window
+env_id: ENV-PG
+runtime_mode: postgres_only
+run_date: 20260318
+steps -> visible result -> db proof -> conclusion
+
+actual_result:
+- end_screenshot: D:\BME2026\TECHNICAL\Remember\qa-gates-codex\P5-T1-IG-FAIL_20260318_ENV-PG_codex-end.png
+- recording: D:\BME2026\TECHNICAL\Remember\qa-gates-codex\P5-T1-IG-FAIL_20260318_ENV-PG_codex.mp4
+- action_chain: empty create -> empty commit -> recovery create Archive-Me -> recovery commit rollback-check
+
+[sqlite-proof]
+sqlite_series= [('Anchor Series', 'active', 'anchor-note'), ('Archive-Me', 'active', 'rollback-check'), ('Inbox', 'active', 'first-note'), ('Inbox', 'active', ''), ('Inbox', 'active', ''), ('Project-A', 'silent', 'follow-up-note')]
+sqlite_target= [('Archive-Me', 'active', 'rollback-check')]
+sqlite_commits= [('anchor-note',), ('rollback-check',), ('first-note',), ('follow-up-note',)]
+
+[postgres-proof]
+pg_series=Anchor Series:active:anchor-note | Archive-Me:active:rollback-check | Inbox:active:first-note | Inbox:active: | Inbox:active: | Project-A:silent:follow-up-note
+pg_target=Archive-Me:active:rollback-check
+pg_commits=anchor-note | rollback-check | first-note | follow-up-note
+
+conclusion: PASS

@@ -117,3 +117,57 @@ $env:PW_BROWSER = 'msedge'
 - source gate: `qa-gates/phase-5/p5-t1-full-regression.md`
 - DEV.md 映射: 三模式启动与读写
 - ROADMAP.md 映射: Phase 5 / 子任务 1
+
+## 2026-03-18 执行结果（Codex / Docker 临时 Postgres）
+
+### 总结
+- 执行脚本：`qa-gates-codex/scripts/run-p5-t1-full-regression.ps1`
+- 临时 DSN：`postgres://remember_p5t1:remember_p5t1@localhost:55433/remember_p5t1`
+- 运行日志：`C:\Users\99741\AppData\Local\Temp\p5t1-logs-f1d18a8f-9f11-4cf6-ac0f-4dfb0b97c6ae`
+- 桌面标题基线：`tauri-app [sqlite_only|postgres_only|dual_sync]`
+- 最终结论：`FAIL`
+- 发布判定：`P5-T1` 未通过，`task.jsonl` 保持未完成
+
+### 自动化基线
+| 检查项 | 结果 | 备注 |
+|---|---|---|
+| `npm run test:unit` | PASS | 75 tests passed |
+| `cargo test --manifest-path src-tauri\Cargo.toml --lib -- --nocapture` | PASS | lib tests 通过 |
+| `cargo test --manifest-path src-tauri\Cargo.toml --test p2_t5_basic_read_write_query -- --nocapture` | PASS | sqlite/postgres 基础读写通过 |
+| `cargo test --manifest-path src-tauri\Cargo.toml --test p3_t1_dual_sync_repository -- --nocapture` | PASS | dual_sync 基本双写通过 |
+| `cargo test --manifest-path src-tauri\Cargo.toml --test p3_t2_parallel_tx_timeout -- --nocapture` | FAIL | `tests/p3_t2_parallel_tx_timeout.rs:79` 期望 `<=4.5s`，实测约 `24.25s` |
+| `cargo test --manifest-path src-tauri\Cargo.toml --test p3_t3_rollback_error_codes -- --nocapture` | PASS | rollback/error-code 用例通过 |
+| `cargo test --manifest-path src-tauri\Cargo.toml --test p3_t4_single_side_compensation_alerts -- --nocapture` | PASS | consistency alert 用例通过 |
+| `cargo test --manifest-path src-tauri\Cargo.toml --test p3_t5_startup_self_heal -- --nocapture` | FAIL | `tests/p3_t5_startup_self_heal.rs:170` 未得到期望的 `RepositoryError::DualWriteFailed(_)` |
+
+### 桌面证据采集
+| 环境 | VG-PASS | VG-FAIL | IG-PASS | IG-FAIL |
+|---|---|---|---|---|
+| `ENV-SQLITE` | 已采集 | 已采集 | 已采集 | 已采集 |
+| `ENV-PG` | 已采集 | 已采集 | 已采集 | 已采集 |
+| `ENV-DUAL` | 已采集 | 已采集 | 已采集 | 已采集 |
+
+### 证据文件
+- `qa-gates-codex/P5-T1-VG-PASS_20260318_ENV-SQLITE_codex.{png,txt}`
+- `qa-gates-codex/P5-T1-VG-FAIL_20260318_ENV-SQLITE_codex.{png,txt}`
+- `qa-gates-codex/P5-T1-IG-PASS_20260318_ENV-SQLITE_codex.{mp4,txt}`
+- `qa-gates-codex/P5-T1-IG-FAIL_20260318_ENV-SQLITE_codex.{mp4,txt}`
+- `qa-gates-codex/P5-T1-VG-PASS_20260318_ENV-PG_codex.{png,txt}`
+- `qa-gates-codex/P5-T1-VG-FAIL_20260318_ENV-PG_codex.{png,txt}`
+- `qa-gates-codex/P5-T1-IG-PASS_20260318_ENV-PG_codex.{mp4,txt}`
+- `qa-gates-codex/P5-T1-IG-FAIL_20260318_ENV-PG_codex.{mp4,txt}`
+- `qa-gates-codex/P5-T1-VG-PASS_20260318_ENV-DUAL_codex.{png,txt}`
+- `qa-gates-codex/P5-T1-VG-FAIL_20260318_ENV-DUAL_codex.{png,txt}`
+- `qa-gates-codex/P5-T1-IG-PASS_20260318_ENV-DUAL_codex.{mp4,txt}`
+- `qa-gates-codex/P5-T1-IG-FAIL_20260318_ENV-DUAL_codex.{mp4,txt}`
+
+### 失败原因
+1. 自动化门禁未全绿：`cargo-p3t2` 与 `cargo-p3t5` 在临时 Docker Postgres 基线上稳定失败，已经满足 `P5-T1` 的失败条件。
+2. 交互证据未证明“真闭环”：
+   `P5-T1-IG-PASS_20260318_ENV-SQLITE_codex.txt`、`P5-T1-IG-PASS_20260318_ENV-PG_codex.txt`、`P5-T1-IG-PASS_20260318_ENV-DUAL_codex.txt` 都出现重复 `Inbox` 系列记录，且 `Project-A` 仍为 `silent`，没有被证明已归档。
+3. 因第 1-2 项未满足，当前 12 组文件只能证明“桌面采集链路可运行”，不能证明 `P5-T1` 的发布级通过。
+
+### 状态回写
+- `qa-gates/MASTER-TRACE-MATRIX.md`：`P5-T1 -> FAIL`
+- `qa-gates-codex/MASTER-TRACE-MATRIX.md`：`P5-T1 -> FAIL`
+- `task.jsonl`：保持 `{\"task_name\":\"执行全量功能回归（含三模式）。\",\"completed\":false}`

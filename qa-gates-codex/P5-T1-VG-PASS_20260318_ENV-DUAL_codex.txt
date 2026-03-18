@@ -1,0 +1,13 @@
+case_id: P5-T1-VG-PASS
+target_mode: desktop_window
+env_id: ENV-DUAL
+runtime_mode: dual_sync
+run_date: 20260318
+steps -> visible result -> db proof -> conclusion
+
+actual_result:
+- window_title: tauri-app [dual_sync]
+- screenshot: D:\BME2026\TECHNICAL\Remember\qa-gates-codex\P5-T1-VG-PASS_20260318_ENV-DUAL_codex.png
+- note: runtime diagnostics and seeded list were visible in the desktop window.
+
+conclusion: PASS
