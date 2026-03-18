@@ -1,0 +1,44 @@
+case_id: P4-T3-VG-PASS
+target_mode: desktop_window (visual supplement) + playwright harness over real sqlite bridge
+env_id: ENV-SQLITE
+run_date: 20260318
+desktop_window_title: tauri-app [sqlite_only]
+steps -> visible result -> db proof -> conclusion
+
+$ playwright-cli -s=P4T3-VG-PASS open about:blank --browser msedge
+### Browser `P4T3-VG-PASS` opened with pid 39108.
+- P4T3-VG-PASS:
+  - browser-type: msedge
+  - user-data-dir: <in-memory>
+  - headed: false
+---
+### Ran Playwright code
+```js
+await page.goto('about:blank');
+```
+### Page
+- Page URL: about:blank
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-18T02-05-33-706Z.yml)
+
+$ playwright-cli -s=P4T3-VG-PASS run-code async (page) => {   await page.addInitScript((bridgeBase) => {     const callbacks = new Map();     let nextId = 1;     const invoke = async function(cmd, args, options) {       const response = await fetch(bridgeBase + 'invoke', {         method: 'POST',         headers: { 'content-type': 'application/json' },         body: JSON.stringify({ cmd: cmd, args: args || {}, options: options })       });       return await response.json();     };     window.__TAURI_INTERNALS__ = {       invoke: invoke,       transformCallback: function(callback, once) {         const id = nextId++;         callbacks.set(id, function(data) {           if (once) callbacks.delete(id);           if (callback) return callback(data);         });         return id;       },       unregisterCallback: function(id) { callbacks.delete(id); },       runCallback: function(id, data) { const cb = callbacks.get(id); if (cb) return cb(data); },       convertFileSrc: function(filePath, protocol) { const p = protocol || 'asset'; return 'http://' + p + '.localhost/' + encodeURIComponent(filePath); },       metadata: { currentWindow: { label: 'main' }, currentWebview: { windowLabel: 'main', label: 'main' } },       plugins: { path: { sep: '\\\\', delimiter: ';' } }     };     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: function() {} };   }, 'http://127.0.0.1:28765/');   await page.goto('http://localhost:1420/', { waitUntil: 'networkidle' }); } 
+### Ran Playwright code
+```js
+await (async (page) => {   await page.addInitScript((bridgeBase) => {     const callbacks = new Map();     let nextId = 1;     const invoke = async function(cmd, args, options) {       const response = await fetch(bridgeBase + 'invoke', {         method: 'POST',         headers: { 'content-type': 'application/json' },         body: JSON.stringify({ cmd: cmd, args: args || {}, options: options })       });       return await response.json();     };     window.__TAURI_INTERNALS__ = {       invoke: invoke,       transformCallback: function(callback, once) {         const id = nextId++;         callbacks.set(id, function(data) {           if (once) callbacks.delete(id);           if (callback) return callback(data);         });         return id;       },       unregisterCallback: function(id) { callbacks.delete(id); },       runCallback: function(id, data) { const cb = callbacks.get(id); if (cb) return cb(data); },       convertFileSrc: function(filePath, protocol) { const p = protocol || 'asset'; return 'http://' + p + '.localhost/' + encodeURIComponent(filePath); },       metadata: { currentWindow: { label: 'main' }, currentWebview: { windowLabel: 'main', label: 'main' } },       plugins: { path: { sep: '\\\\', delimiter: ';' } }     };     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: function() {} };   }, 'http://127.0.0.1:28765/');   await page.goto('http://localhost:1420/', { waitUntil: 'networkidle' }); } )(page);
+```
+### Page
+- Page URL: http://localhost:1420/
+- Page Title: Tauri + React + Typescript
+
+$ playwright-cli -s=P4T3-VG-PASS run-code async (page) => {   const waitForFocus = async (testId) => {     await page.waitForFunction(       (targetTestId) => document.activeElement?.getAttribute('data-testid') === targetTestId,       testId,     );   };   await page.locator('[data-testid=remember-shell]').waitFor();   await page.locator('[data-testid=series-list-panel]').waitFor();   await page.locator('[data-testid=runtime-source-badge]').waitFor();   await page.screenshot({ path: 'C:\\Users\\99741\\AppData\\Local\\Temp\\p4t3-vg-pass-browse.png', fullPage: true });   await page.keyboard.press('/');   const search = page.locator('[data-testid=search-command-input]');   await search.waitFor();   await waitForFocus('search-command-input');   await page.keyboard.insertText('P4T3 Gate Silent');   await page.waitForTimeout(400);   await page.screenshot({ path: 'C:\\Users\\99741\\AppData\\Local\\Temp\\p4t3-vg-pass-search.png', fullPage: true });   await page.keyboard.press('Escape');   await search.waitFor({ state: 'hidden' });   await page.keyboard.press('Shift+N');   const create = page.locator('[data-testid=create-series-command-input]');   await create.waitFor();   await waitForFocus('create-series-command-input');   await page.keyboard.insertText('VG Visual Draft');   await page.waitForTimeout(300);   await page.screenshot({ path: 'C:\\Users\\99741\\AppData\\Local\\Temp\\p4t3-vg-pass-create.png', fullPage: true });   await page.keyboard.press('Escape');   await create.waitFor({ state: 'hidden' });   await page.keyboard.press('x');   const commit = page.locator('[data-testid=commit-draft-command-input]');   await commit.waitFor();   await waitForFocus('commit-draft-command-input');   if ((await commit.inputValue()) !== 'x') throw new Error('printable key did not seed commit draft');   await page.keyboard.insertText(' visual draft');   await page.waitForTimeout(300);   await page.screenshot({ path: 'C:\\Users\\99741\\AppData\\Local\\Temp\\p4t3-vg-pass-commit.png', fullPage: true });   await page.keyboard.press('Escape');   await commit.waitFor({ state: 'hidden' }); } 
+### Ran Playwright code
+```js
+await (async (page) => {   const waitForFocus = async (testId) => {     await page.waitForFunction(       (targetTestId) => document.activeElement?.getAttribute('data-testid') === targetTestId,       testId,     );   };   await page.locator('[data-testid=remember-shell]').waitFor();   await page.locator('[data-testid=series-list-panel]').waitFor();   await page.locator('[data-testid=runtime-source-badge]').waitFor();   await page.screenshot({ path: 'C:\\Users\\99741\\AppData\\Local\\Temp\\p4t3-vg-pass-browse.png', fullPage: true });   await page.keyboard.press('/');   const search = page.locator('[data-testid=search-command-input]');   await search.waitFor();   await waitForFocus('search-command-input');   await page.keyboard.insertText('P4T3 Gate Silent');   await page.waitForTimeout(400);   await page.screenshot({ path: 'C:\\Users\\99741\\AppData\\Local\\Temp\\p4t3-vg-pass-search.png', fullPage: true });   await page.keyboard.press('Escape');   await search.waitFor({ state: 'hidden' });   await page.keyboard.press('Shift+N');   const create = page.locator('[data-testid=create-series-command-input]');   await create.waitFor();   await waitForFocus('create-series-command-input');   await page.keyboard.insertText('VG Visual Draft');   await page.waitForTimeout(300);   await page.screenshot({ path: 'C:\\Users\\99741\\AppData\\Local\\Temp\\p4t3-vg-pass-create.png', fullPage: true });   await page.keyboard.press('Escape');   await create.waitFor({ state: 'hidden' });   await page.keyboard.press('x');   const commit = page.locator('[data-testid=commit-draft-command-input]');   await commit.waitFor();   await waitForFocus('commit-draft-command-input');   if ((await commit.inputValue()) !== 'x') throw new Error('printable key did not seed commit draft');   await page.keyboard.insertText(' visual draft');   await page.waitForTimeout(300);   await page.screenshot({ path: 'C:\\Users\\99741\\AppData\\Local\\Temp\\p4t3-vg-pass-commit.png', fullPage: true });   await page.keyboard.press('Escape');   await commit.waitFor({ state: 'hidden' }); } )(page);
+```
+
+$ playwright-cli -s=P4T3-VG-PASS close
+Browser 'P4T3-VG-PASS' closed
+
+
+visual_assertions: browse/search/create/commit surfaces visible in one keyboard-driven pass
+conclusion: PASS

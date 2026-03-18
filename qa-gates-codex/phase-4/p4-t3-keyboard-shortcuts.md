@@ -117,3 +117,15 @@ $env:PW_BROWSER = 'msedge'
 - source gate: `qa-gates/phase-4/p4-t3-keyboard-shortcuts.md`
 - DEV.md 映射: ↑/↓/Enter/Esc/←/→//Shift+N/a
 - ROADMAP.md 映射: Phase 4 / 子任务 3
+
+## 2026-03-18 执行结果
+| case_id | result | evidence |
+|---|---|---|
+| `P4-T3-VG-PASS` | PASS | `qa-gates-codex/P4-T3-VG-PASS_20260318_ENV-SQLITE_codex.png` + `qa-gates-codex/P4-T3-VG-PASS_20260318_ENV-SQLITE_codex.txt` |
+| `P4-T3-VG-FAIL` | PASS | `qa-gates-codex/P4-T3-VG-FAIL_20260318_ENV-SQLITE_codex.png` + `qa-gates-codex/P4-T3-VG-FAIL_20260318_ENV-SQLITE_codex.txt` |
+| `P4-T3-IG-PASS` | BLOCKED | `qa-gates-codex/P4-T3-IG-PASS_20260318_ENV-SQLITE_codex.mp4` + `qa-gates-codex/P4-T3-IG-PASS_20260318_ENV-SQLITE_codex.txt` |
+| `P4-T3-IG-FAIL` | BLOCKED | `qa-gates-codex/P4-T3-IG-FAIL_20260318_ENV-SQLITE_codex.mp4` + `qa-gates-codex/P4-T3-IG-FAIL_20260318_ENV-SQLITE_codex.txt` |
+
+- target_mode: `desktop_window` planned, `playwright` sqlite-bridge fallback used for interaction capture, desktop window retained as visual supplement.
+- overall: `BLOCKED`
+- blocker: direct desktop keyboard injection stayed unstable; fallback harness could confirm visual cases and partial negative-path banners, but interaction persistence/write assertions did not remain conclusive enough to certify a desktop PASS or a product FAIL.

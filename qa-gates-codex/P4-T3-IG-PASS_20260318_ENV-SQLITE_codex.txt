@@ -1,0 +1,51 @@
+case_id: P4-T3-IG-PASS
+target_mode: desktop_window (visual supplement) + playwright harness over real sqlite bridge
+env_id: ENV-SQLITE
+run_date: 20260318
+desktop_window_title: tauri-app [sqlite_only]
+steps -> visible result -> db proof -> conclusion
+
+$ playwright-cli -s=P4T3-IG-PASS open about:blank --browser msedge
+### Browser `P4T3-IG-PASS` opened with pid 38696.
+- P4T3-IG-PASS:
+  - browser-type: msedge
+  - user-data-dir: <in-memory>
+  - headed: false
+---
+### Ran Playwright code
+```js
+await page.goto('about:blank');
+```
+### Page
+- Page URL: about:blank
+### Snapshot
+- [Snapshot](.playwright-cli\page-2026-03-18T02-13-50-794Z.yml)
+
+$ playwright-cli -s=P4T3-IG-PASS run-code async (page) => {   await page.addInitScript((bridgeBase) => {     const callbacks = new Map();     let nextId = 1;     const invoke = async function(cmd, args, options) {       const response = await fetch(bridgeBase + 'invoke', {         method: 'POST',         headers: { 'content-type': 'application/json' },         body: JSON.stringify({ cmd: cmd, args: args || {}, options: options })       });       return await response.json();     };     window.__TAURI_INTERNALS__ = {       invoke: invoke,       transformCallback: function(callback, once) {         const id = nextId++;         callbacks.set(id, function(data) {           if (once) callbacks.delete(id);           if (callback) return callback(data);         });         return id;       },       unregisterCallback: function(id) { callbacks.delete(id); },       runCallback: function(id, data) { const cb = callbacks.get(id); if (cb) return cb(data); },       convertFileSrc: function(filePath, protocol) { const p = protocol || 'asset'; return 'http://' + p + '.localhost/' + encodeURIComponent(filePath); },       metadata: { currentWindow: { label: 'main' }, currentWebview: { windowLabel: 'main', label: 'main' } },       plugins: { path: { sep: '\\\\', delimiter: ';' } }     };     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: function() {} };   }, 'http://127.0.0.1:28765/');   await page.goto('http://localhost:1420/', { waitUntil: 'networkidle' }); } 
+### Ran Playwright code
+```js
+await (async (page) => {   await page.addInitScript((bridgeBase) => {     const callbacks = new Map();     let nextId = 1;     const invoke = async function(cmd, args, options) {       const response = await fetch(bridgeBase + 'invoke', {         method: 'POST',         headers: { 'content-type': 'application/json' },         body: JSON.stringify({ cmd: cmd, args: args || {}, options: options })       });       return await response.json();     };     window.__TAURI_INTERNALS__ = {       invoke: invoke,       transformCallback: function(callback, once) {         const id = nextId++;         callbacks.set(id, function(data) {           if (once) callbacks.delete(id);           if (callback) return callback(data);         });         return id;       },       unregisterCallback: function(id) { callbacks.delete(id); },       runCallback: function(id, data) { const cb = callbacks.get(id); if (cb) return cb(data); },       convertFileSrc: function(filePath, protocol) { const p = protocol || 'asset'; return 'http://' + p + '.localhost/' + encodeURIComponent(filePath); },       metadata: { currentWindow: { label: 'main' }, currentWebview: { windowLabel: 'main', label: 'main' } },       plugins: { path: { sep: '\\\\', delimiter: ';' } }     };     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: function() {} };   }, 'http://127.0.0.1:28765/');   await page.goto('http://localhost:1420/', { waitUntil: 'networkidle' }); } )(page);
+```
+### Page
+- Page URL: http://localhost:1420/
+- Page Title: Tauri + React + Typescript
+
+$ playwright-cli -s=P4T3-IG-PASS video-start
+### Result
+Video recording started.
+
+$ playwright-cli -s=P4T3-IG-PASS run-code async (page) => {   const waitForFocus = async (testId) => {     await page.waitForFunction(       (targetTestId) => document.activeElement?.getAttribute('data-testid') === targetTestId,       testId,     );   };   const waitForSelectedSeries = async (seriesId) => {     await page.locator('[data-testid="series-open-' + seriesId + '"]').waitFor();   };   const searchAndSelect = async (name, seriesId) => {     await page.keyboard.press('/');     const search = page.locator('[data-testid=search-command-input]');     await search.waitFor();     await waitForFocus('search-command-input');     await page.keyboard.insertText(name);     await waitForSelectedSeries(seriesId);     await page.waitForTimeout(250);     await page.keyboard.press('Escape');     await search.waitFor({ state: 'hidden' });     await page.waitForTimeout(250);     await waitForSelectedSeries(seriesId);   };   await page.locator('[data-testid=series-list-panel]').waitFor();   await waitForSelectedSeries('p4t3-gate-active');   await searchAndSelect('P4T3 Gate Active', 'p4t3-gate-active');   await waitForSelectedSeries('p4t3-gate-active');   await page.keyboard.press('ArrowDown');   await waitForSelectedSeries('p4t3-gate-silent');   await page.keyboard.press('ArrowUp');   await waitForSelectedSeries('p4t3-gate-active');   await page.keyboard.press('ArrowRight');   await page.locator('[data-testid=timeline-panel]').waitFor();   await page.keyboard.press('ArrowLeft');   await waitForSelectedSeries('p4t3-gate-active');   await page.keyboard.press('Shift+N');   const create = page.locator('[data-testid=create-series-command-input]');   await create.waitFor();   await waitForFocus('create-series-command-input');   await page.keyboard.insertText('P4T3 Gate New');   await page.keyboard.press('Enter');   const commit = page.locator('[data-testid=commit-draft-command-input]');   await commit.waitFor();   await waitForFocus('commit-draft-command-input');   const commitLabel = await page.locator('[data-testid=commit-draft-command-bar] .command-label').textContent();   if (!commitLabel.includes('P4T3 Gate New')) throw new Error('new series not selected after create: ' + commitLabel);   await page.keyboard.insertText('first keyboard commit');   await page.keyboard.press('Enter');   await commit.waitFor({ state: 'hidden' });   await page.waitForTimeout(500);   await page.keyboard.press('x');   await commit.waitFor();   await waitForFocus('commit-draft-command-input');   const initialDraft = await commit.inputValue();   if (initialDraft !== 'x') throw new Error('direct printable key did not start commit draft');   await page.keyboard.insertText(' second keyboard commit');   await page.keyboard.press('Enter');   await commit.waitFor({ state: 'hidden' });   await page.waitForTimeout(500);   await page.keyboard.press('ArrowRight');   await page.locator('[data-testid=timeline-panel]').waitFor();   await page.locator('[data-testid=timeline-list]').waitFor();   const timelineText = await page.locator('[data-testid=timeline-list]').textContent();   if (!timelineText.includes('second keyboard commit')) throw new Error('timeline missing second commit');   await page.keyboard.press('Escape');   await page.locator('[data-testid=series-list-panel]').waitFor();   await searchAndSelect('P4T3 Gate Silent', 'p4t3-gate-silent');   await waitForSelectedSeries('p4t3-gate-silent');   await page.keyboard.press('a');   await page.locator('[data-testid="series-row-p4t3-gate-silent"]').waitFor({ state: 'hidden' }); } 
+### Error
+TimeoutError: locator.waitFor: Timeout 5000ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-testid="series-open-p4t3-gate-silent"]') to be visible[22m
+
+[db-series-after-block]
+[{"name":"P4T3 Gate Active","status":"active","archived_at":null,"last_updated_at":"2026-03-18T01:00:00Z"},{"name":"P4T3 Gate Silent","status":"silent","archived_at":null,"last_updated_at":"2026-03-04T01:00:00Z"}]
+
+[db-new-series-commits-after-block]
+[{"commitCount":0}]
+
+blocked_reason: desktop_window keyboard automation was not reliable; the playwright sqlite bridge fallback reproduced a selection persistence gap on `search -> Esc -> archive silent`, but did not yield durable sqlite writes for the preceding create/commit path, so this interaction gate is not a conclusive product FAIL.
+conclusion: BLOCKED
+
