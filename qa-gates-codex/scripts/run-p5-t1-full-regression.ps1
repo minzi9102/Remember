@@ -428,6 +428,8 @@ function Wait-ScreenRecording {
 
     & $ffmpegExe `
       -y `
+      -hide_banner `
+      -loglevel "error" `
       -framerate "$($Recording.FrameRate)" `
       -i $framePattern `
       -c:v "libx264" `
@@ -553,7 +555,7 @@ print("sqlite_series=", series_rows)
 print("sqlite_target=", target_row)
 print("sqlite_commits=", timeline_rows)
 "@
-  & $pythonExe -c $code
+  Invoke-Python -Code $code
 }
 
 function Query-PostgresEvidence {
