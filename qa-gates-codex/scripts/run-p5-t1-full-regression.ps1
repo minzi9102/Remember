@@ -180,7 +180,7 @@ function Stop-ViteServer {
 }
 
 function Start-TempPostgres {
-  docker rm -f $containerName *> $null
+  Stop-TempPostgres
   docker run --rm -d `
     --name $containerName `
     -e "POSTGRES_DB=$tempPgDatabase" `
