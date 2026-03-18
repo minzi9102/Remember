@@ -1,0 +1,16 @@
+case_id: P4-T1-VG-FAIL
+target_mode: desktop_window
+env_id: ENV-SQLITE
+runtime_mode: sqlite_only
+run_date: 20260319
+tester: codex
+webdriver_health_mode: root-session
+webdriver_status_endpoint: failed: ?????????: (500) ???????? | body: {"status":13,"value":{"error":"unknown error","message":"An unknown error occurred in the remote end while processing the command."}}
+webdriver_root_session_probe: ok
+structure: environment -> steps -> actual_result -> log_excerpt -> sqlite_proof -> conclusion
+
+actual_result:
+- screenshot: D:\BME2026\TECHNICAL\Remember\qa-gates-codex\P4-T1-VG-FAIL_20260319_ENV-SQLITE_codex.png
+- failure: ASSERT: window visibility did not become False for process 26784
+
+conclusion: FAIL

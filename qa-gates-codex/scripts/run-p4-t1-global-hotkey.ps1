@@ -22,6 +22,50 @@ using System.Text;
 
 public static class Win32Native {
   [StructLayout(LayoutKind.Sequential)]
+  public struct INPUT {
+    public int type;
+    public InputUnion U;
+  }
+
+  [StructLayout(LayoutKind.Explicit)]
+  public struct InputUnion {
+    [FieldOffset(0)]
+    public MOUSEINPUT mi;
+
+    [FieldOffset(0)]
+    public KEYBDINPUT ki;
+
+    [FieldOffset(0)]
+    public HARDWAREINPUT hi;
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
+  public struct MOUSEINPUT {
+    public int dx;
+    public int dy;
+    public uint mouseData;
+    public uint dwFlags;
+    public uint time;
+    public IntPtr dwExtraInfo;
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
+  public struct KEYBDINPUT {
+    public ushort wVk;
+    public ushort wScan;
+    public uint dwFlags;
+    public uint time;
+    public IntPtr dwExtraInfo;
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
+  public struct HARDWAREINPUT {
+    public uint uMsg;
+    public ushort wParamL;
+    public ushort wParamH;
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
   public struct RECT {
     public int Left;
     public int Top;
@@ -49,6 +93,9 @@ public static class Win32Native {
 
   [DllImport("user32.dll", CharSet = CharSet.Unicode)]
   public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+  [DllImport("user32.dll", SetLastError = true)]
+  public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 }
 "@
 
@@ -80,12 +127,17 @@ $validCases = @(
 )
 $selectedCases = [System.Collections.Generic.List[string]]::new()
 $caseResults = [ordered]@{}
-$wdKeys = @{
-  Enter = [string][char]0xE007
-  Shift = [string][char]0xE008
-  Alt = [string][char]0xE00A
-  Escape = [string][char]0xE00C
+$vkKeys = @{
+  Enter = [uint16]0x0D
+  Shift = [uint16]0x10
+  Alt = [uint16]0x12
+  Space = [uint16]0x20
+  N = [uint16][byte][char]'N'
 }
+$script:KeyboardBackend = "win32-sendinput"
+$script:InputTypeKeyboard = [uint32]1
+$script:KeyEventKeyUp = [uint32]0x0002
+$script:KeyEventUnicode = [uint32]0x0004
 $script:WebDriverHealth = [pscustomobject]@{
   Reachable = $false
   StatusEndpointOk = $false
@@ -240,25 +292,53 @@ function Stop-ProcessSafe {
   param($Process)
 
   if ($null -ne $Process) {
+    $processId = $null
     try {
       if ($Process -is [System.Diagnostics.Process]) {
+        $processId = $Process.Id
         if (-not $Process.HasExited) {
           Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
         }
       } elseif ($Process.PSObject.Properties.Name -contains "Id") {
+        $processId = $Process.Id
         Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
       }
     } catch {
     }
+
+    if ($null -ne $processId) {
+      Wait-ProcessExit -ProcessId $processId | Out-Null
+    }
   }
 }
 
+function Wait-ProcessExit {
+  param(
+    [int]$ProcessId,
+    [int]$Attempts = 40,
+    [int]$DelayMs = 250
+  )
+
+  for ($index = 0; $index -lt $Attempts; $index++) {
+    if (-not (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)) {
+      return $true
+    }
+    Start-Sleep -Milliseconds $DelayMs
+  }
+
+  return $false
+}
+
 function Stop-RememberProcesses {
-  Get-Process -Name "tauri-app" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Get-Process -Name "tauri-app" -ErrorAction SilentlyContinue | ForEach-Object {
+    Stop-ProcessSafe -Process $_
+  }
 }
 
 function Stop-NotepadProcesses {
-  Get-Process -Name "notepad" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Get-Process -Name "notepad" -ErrorAction SilentlyContinue | ForEach-Object {
+    Stop-ProcessSafe -Process $_
+  }
 }
 
 function Stop-ViteProcesses {
@@ -271,6 +351,7 @@ function Stop-ViteProcesses {
     ForEach-Object {
       try {
         Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
+        Wait-ProcessExit -ProcessId $_.ProcessId | Out-Null
       } catch {
       }
     }
@@ -297,28 +378,46 @@ function Wait-HttpReady {
 }
 
 function Start-ViteServer {
-  Stop-ViteProcesses
-  New-Dir -Path $runtimeLogDir
-
   $viteOut = Join-Path $runtimeLogDir "p4t1-vite.out.log"
   $viteErr = Join-Path $runtimeLogDir "p4t1-vite.err.log"
-  if (Test-Path $viteOut) { Remove-Item $viteOut -Force }
-  if (Test-Path $viteErr) { Remove-Item $viteErr -Force }
 
-  $global:ViteProcess = Start-Process `
-    -FilePath "npm.cmd" `
-    -ArgumentList @("run", "dev", "--", "--host", "127.0.0.1", "--port", "$vitePort") `
-    -WorkingDirectory $root `
-    -PassThru `
-    -RedirectStandardOutput $viteOut `
-    -RedirectStandardError $viteErr
+  for ($attempt = 1; $attempt -le 2; $attempt++) {
+    Stop-ViteProcesses
+    New-Dir -Path $runtimeLogDir
+    if (Test-Path $viteOut) { Remove-Item $viteOut -Force }
+    if (Test-Path $viteErr) { Remove-Item $viteErr -Force }
 
-  Wait-HttpReady -Url $viteUrl
+    $global:ViteProcess = Start-Process `
+      -FilePath "npm.cmd" `
+      -ArgumentList @("run", "dev", "--", "--host", "127.0.0.1", "--port", "$vitePort") `
+      -WorkingDirectory $root `
+      -PassThru `
+      -RedirectStandardOutput $viteOut `
+      -RedirectStandardError $viteErr
+
+    try {
+      Wait-HttpReady -Url $viteUrl
+      return
+    } catch {
+      if ($global:ViteProcess -and -not $global:ViteProcess.HasExited) {
+        Stop-Process -Id $global:ViteProcess.Id -Force -ErrorAction SilentlyContinue
+        Wait-ProcessExit -ProcessId $global:ViteProcess.Id | Out-Null
+      }
+      $global:ViteProcess = $null
+
+      if ($attempt -ge 2) {
+        throw $_
+      }
+
+      Wait-DesktopSettle -Milliseconds 1000
+    }
+  }
 }
 
 function Stop-ViteServer {
   if ($global:ViteProcess -and -not $global:ViteProcess.HasExited) {
     Stop-Process -Id $global:ViteProcess.Id -Force -ErrorAction SilentlyContinue
+    Wait-ProcessExit -ProcessId $global:ViteProcess.Id | Out-Null
   }
 
   Stop-ViteProcesses
@@ -595,6 +694,7 @@ function Wait-ScreenRecording {
       -loglevel "error" `
       -framerate "$($Recording.FrameRate)" `
       -i $framePattern `
+      -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" `
       -c:v "libx264" `
       -pix_fmt "yuv420p" `
       $Recording.OutputPath | Out-Null
@@ -665,14 +765,14 @@ function Get-WebExceptionDetails {
 
   $message = $ErrorRecord.Exception.Message
   try {
-    if ($ErrorRecord.Exception.Response) {
-      $stream = $ErrorRecord.Exception.Response.GetResponseStream()
-      if ($stream) {
-        $reader = New-Object System.IO.StreamReader($stream)
-        $body = $reader.ReadToEnd()
-        if (-not [string]::IsNullOrWhiteSpace($body)) {
-          return "$message | body: $body"
-        }
+    if ($ErrorRecord.ErrorDetails.Message) {
+      return "$message | body: $($ErrorRecord.ErrorDetails.Message)"
+    }
+
+    if ($ErrorRecord.Exception.Response -and $ErrorRecord.Exception.Response.Content) {
+      $body = $ErrorRecord.Exception.Response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+      if (-not [string]::IsNullOrWhiteSpace($body)) {
+        return "$message | body: $body"
       }
     }
   } catch {
@@ -770,6 +870,32 @@ function Stop-WebDriverSession {
     Invoke-WebDriverJson -Method Delete -Path "/session/$SessionId" | Out-Null
   } catch {
   }
+
+  Wait-WebDriverSessionClosed -SessionId $SessionId | Out-Null
+}
+
+function Wait-WebDriverSessionClosed {
+  param(
+    [string]$SessionId,
+    [int]$Attempts = 12,
+    [int]$DelayMs = 250
+  )
+
+  if ([string]::IsNullOrWhiteSpace($SessionId)) {
+    return $true
+  }
+
+  for ($index = 0; $index -lt $Attempts; $index++) {
+    try {
+      $uri = $WebDriverUrl.TrimEnd("/") + "/session/$SessionId/window/handles"
+      Invoke-RestMethod -Method Get -Uri $uri -TimeoutSec 2 | Out-Null
+    } catch {
+      return $true
+    }
+    Start-Sleep -Milliseconds $DelayMs
+  }
+
+  return $false
 }
 
 function Get-WebDriverHealth {
@@ -846,16 +972,7 @@ function Send-WebDriverChord {
     [string[]]$Keys
   )
 
-  $actions = [System.Collections.Generic.List[object]]::new()
-  foreach ($key in $Keys) {
-    $actions.Add(@{ type = "keyDown"; value = $key })
-  }
-  for ($index = $Keys.Count - 1; $index -ge 0; $index--) {
-    $actions.Add(@{ type = "keyUp"; value = $Keys[$index] })
-  }
-
-  Invoke-WebDriverActions -SessionId $SessionId -Actions $actions
-  Start-Sleep -Milliseconds 500
+  throw "webdriver keyboard input is disabled for P4-T1; use win32 input helpers instead"
 }
 
 function Send-WebDriverText {
@@ -864,15 +981,187 @@ function Send-WebDriverText {
     [string]$Text
   )
 
-  $actions = [System.Collections.Generic.List[object]]::new()
-  foreach ($char in $Text.ToCharArray()) {
-    $value = [string]$char
-    $actions.Add(@{ type = "keyDown"; value = $value })
-    $actions.Add(@{ type = "keyUp"; value = $value })
+  throw "webdriver keyboard input is disabled for P4-T1; use win32 input helpers instead"
+}
+
+function New-KeyInputRecord {
+  param(
+    [uint16]$VirtualKey = 0,
+    [uint16]$ScanCode = 0,
+    [uint32]$Flags = 0
+  )
+
+  $input = New-Object Win32Native+INPUT
+  $input.type = $script:InputTypeKeyboard
+  $input.U.ki.wVk = $VirtualKey
+  $input.U.ki.wScan = $ScanCode
+  $input.U.ki.dwFlags = $Flags
+  $input.U.ki.time = 0
+  $input.U.ki.dwExtraInfo = [IntPtr]::Zero
+  return $input
+}
+
+function Invoke-Win32KeyboardInput {
+  param(
+    [Win32Native+INPUT[]]$Inputs,
+    [string]$Description = "keyboard input"
+  )
+
+  if ($null -eq $Inputs -or $Inputs.Length -eq 0) {
+    return
   }
 
-  Invoke-WebDriverActions -SessionId $SessionId -Actions $actions
-  Start-Sleep -Milliseconds 300
+  $inputSize = [System.Runtime.InteropServices.Marshal]::SizeOf([type]"Win32Native+INPUT")
+  $sent = [Win32Native]::SendInput([uint32]$Inputs.Length, $Inputs, $inputSize)
+  if ($sent -ne $Inputs.Length) {
+    throw "win32 SendInput failed for $Description (sent $sent of $($Inputs.Length))"
+  }
+}
+
+function Send-KeyChordWin32 {
+  param(
+    [uint16[]]$Keys,
+    [string]$Description = "key chord",
+    [int]$PostDelayMs = 500
+  )
+
+  $records = [System.Collections.Generic.List[object]]::new()
+  foreach ($key in $Keys) {
+    $records.Add((New-KeyInputRecord -VirtualKey $key))
+  }
+  for ($index = $Keys.Count - 1; $index -ge 0; $index--) {
+    $records.Add((New-KeyInputRecord -VirtualKey $Keys[$index] -Flags $script:KeyEventKeyUp))
+  }
+
+  $inputArray = New-Object "Win32Native+INPUT[]" $records.Count
+  for ($index = 0; $index -lt $records.Count; $index++) {
+    $inputArray[$index] = $records[$index]
+  }
+
+  Invoke-Win32KeyboardInput -Inputs $inputArray -Description $Description
+  Start-Sleep -Milliseconds $PostDelayMs
+}
+
+function Send-HotkeyWin32 {
+  param([int]$PostDelayMs = 700)
+
+  Send-KeyChordWin32 -Keys @($vkKeys.Alt, $vkKeys.Space) -Description "Alt+Space hotkey" -PostDelayMs $PostDelayMs
+}
+
+function Send-TextWin32 {
+  param(
+    [string]$Text,
+    [int]$PostDelayMs = 300
+  )
+
+  $records = [System.Collections.Generic.List[object]]::new()
+  foreach ($char in $Text.ToCharArray()) {
+    $scanCode = [uint16][char]$char
+    $records.Add((New-KeyInputRecord -ScanCode $scanCode -Flags $script:KeyEventUnicode))
+    $records.Add((New-KeyInputRecord -ScanCode $scanCode -Flags ($script:KeyEventUnicode -bor $script:KeyEventKeyUp)))
+  }
+
+  $inputArray = New-Object "Win32Native+INPUT[]" $records.Count
+  for ($index = 0; $index -lt $records.Count; $index++) {
+    $inputArray[$index] = $records[$index]
+  }
+
+  Invoke-Win32KeyboardInput -Inputs $inputArray -Description "text input"
+  Start-Sleep -Milliseconds $PostDelayMs
+}
+
+function Get-WindowInventory {
+  $windows = Get-Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.MainWindowHandle -ne 0 -and -not [string]::IsNullOrWhiteSpace($_.MainWindowTitle) } |
+    Sort-Object ProcessName, Id
+
+  if (-not $windows) {
+    return @("no visible windows")
+  }
+
+  return $windows | ForEach-Object {
+    "$($_.ProcessName)#$($_.Id) [$($_.MainWindowTitle)]"
+  }
+}
+
+function Get-FilePreview {
+  param(
+    [string]$Path,
+    [int]$Tail = 40
+  )
+
+  if (-not (Test-Path $Path)) {
+    return @("missing: $Path")
+  }
+
+  $lines = Get-Content -Path $Path -Tail $Tail -ErrorAction SilentlyContinue
+  if (-not $lines) {
+    return @("empty: $Path")
+  }
+
+  return $lines
+}
+
+function Write-StartupDiagnostic {
+  param(
+    [string]$CaseKey,
+    [string[]]$AcceptedTitles,
+    [string]$StdoutPath,
+    [string]$StderrPath,
+    [string]$FailureMessage,
+    [int]$Attempt,
+    $Process
+  )
+
+  $diagPath = Join-Path $runtimeLogDir "${CaseKey}-startup-diagnostic-attempt${Attempt}.txt"
+  $exitCode = "unavailable"
+  $processState = "missing"
+
+  if ($Process) {
+    try {
+      $Process.Refresh()
+      $processState = if ($Process.HasExited) { "exited" } else { "running" }
+      if ($Process.HasExited) {
+        $exitCode = $Process.ExitCode
+      }
+    } catch {
+      $processState = "refresh-failed: $($_.Exception.Message)"
+    }
+  }
+
+  $lines = [System.Collections.Generic.List[string]]::new()
+  $lines.Add("case_key: $CaseKey")
+  $lines.Add("attempt: $Attempt")
+  $lines.Add("accepted_titles: $($AcceptedTitles -join ' | ')")
+  $lines.Add("failure: $FailureMessage")
+  $lines.Add("process_state: $processState")
+  $lines.Add("process_exit_code: $exitCode")
+  $lines.Add("stdout_path: $StdoutPath")
+  $lines.Add("stderr_path: $StderrPath")
+  $lines.Add("")
+  $lines.Add("window_inventory:")
+  foreach ($line in (Get-WindowInventory)) {
+    $lines.Add("- $line")
+  }
+  $lines.Add("")
+  $lines.Add("stdout_tail:")
+  foreach ($line in (Get-FilePreview -Path $StdoutPath)) {
+    $lines.Add("- $line")
+  }
+  $lines.Add("")
+  $lines.Add("stderr_tail:")
+  foreach ($line in (Get-FilePreview -Path $StderrPath)) {
+    $lines.Add("- $line")
+  }
+
+  Set-Content -Path $diagPath -Value $lines -Encoding ascii
+  return $diagPath
+}
+
+function Wait-DesktopSettle {
+  param([int]$Milliseconds = 750)
+
+  Start-Sleep -Milliseconds $Milliseconds
 }
 
 function Wait-LogContains {
@@ -905,7 +1194,7 @@ function Get-LogExcerpt {
     if (Test-Path $path) {
       $matches = Select-String -Path $path -Pattern $Pattern -SimpleMatch
       foreach ($match in $matches) {
-        $lines.Add("{0}: {1}" -f (Split-Path $path -Leaf), $match.Line.Trim())
+        $lines.Add("$(Split-Path $path -Leaf): $($match.Line.Trim())")
       }
     }
   }
@@ -961,13 +1250,41 @@ function Stop-HotkeyConflictHelper {
   try {
     if ($Helper.Process -and -not $Helper.Process.HasExited) {
       Stop-Process -Id $Helper.Process.Id -Force -ErrorAction SilentlyContinue
+      Wait-ProcessExit -ProcessId $Helper.Process.Id | Out-Null
     }
   } catch {
   }
+
+  Wait-DesktopSettle -Milliseconds 500
 }
 
 function Start-NotepadWindow {
-  $process = Start-Process -FilePath "notepad.exe" -PassThru
+  $windowScript = Join-Path $env:TEMP ("p4t1-background-window-" + [guid]::NewGuid().ToString() + ".ps1")
+  $windowCode = @"
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+`$form = New-Object System.Windows.Forms.Form
+`$form.Text = 'P4T1 Background'
+`$form.Width = 420
+`$form.Height = 180
+`$form.StartPosition = 'CenterScreen'
+`$form.TopMost = `$false
+`$label = New-Object System.Windows.Forms.Label
+`$label.Dock = 'Fill'
+`$label.TextAlign = 'MiddleCenter'
+`$label.Font = New-Object System.Drawing.Font('Segoe UI', 12)
+`$label.Text = 'P4-T1 background window'
+`$form.Controls.Add(`$label)
+[void]`$form.ShowDialog()
+"@
+  Set-Content -Path $windowScript -Value $windowCode -Encoding ascii
+
+  $process = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+    "-NoProfile",
+    "-ExecutionPolicy", "Bypass",
+    "-STA",
+    "-File", $windowScript
+  ) -PassThru
   $window = Wait-ProcessWindow -ProcessId $process.Id
   Focus-ProcessWindow -Process $window
   return $window
@@ -977,25 +1294,48 @@ function Prepare-CleanEnvironment {
   Stop-RememberProcesses
   Stop-NotepadProcesses
   Stop-ViteServer
+  Wait-DesktopSettle -Milliseconds 500
   Reset-SqliteDatabase
   Write-AppConfig
   Start-ViteServer
+  Wait-DesktopSettle -Milliseconds 300
 }
 
 function Start-CaseAppWindow {
   param(
     [string]$CaseKey,
-    [string[]]$AcceptedTitles
+    [string[]]$AcceptedTitles,
+    [int]$Attempts = 2
   )
 
-  $app = Start-App -CaseKey $CaseKey
-  $window = Wait-WindowTitle -ProcessId $app.Process.Id -AcceptedTitles $AcceptedTitles
-  Start-Sleep -Seconds 2
+  for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+    $app = Start-App -CaseKey $CaseKey
+    try {
+      $window = Wait-WindowTitle -ProcessId $app.Process.Id -AcceptedTitles $AcceptedTitles
+      Start-Sleep -Seconds 2
 
-  return [pscustomobject]@{
-    Process = $window
-    StdoutPath = $app.StdoutPath
-    StderrPath = $app.StderrPath
+      return [pscustomobject]@{
+        Process = $window
+        StdoutPath = $app.StdoutPath
+        StderrPath = $app.StderrPath
+      }
+    } catch {
+      $diagPath = Write-StartupDiagnostic `
+        -CaseKey $CaseKey `
+        -AcceptedTitles $AcceptedTitles `
+        -StdoutPath $app.StdoutPath `
+        -StderrPath $app.StderrPath `
+        -FailureMessage $_.Exception.Message `
+        -Attempt $attempt `
+        -Process $app.Process
+
+      Stop-ProcessSafe -Process $app.Process
+      if ($attempt -ge $Attempts) {
+        throw "$($_.Exception.Message) (startup diagnostics: $diagPath)"
+      }
+
+      Wait-DesktopSettle
+    }
   }
 }
 
@@ -1041,6 +1381,7 @@ function Invoke-AttachWindowProbe {
   } finally {
     if ($probeApp) { Stop-ProcessSafe -Process $probeApp.Process }
     Stop-ViteServer
+    Wait-DesktopSettle
   }
 }
 
@@ -1050,8 +1391,6 @@ function Run-VGPassCase {
   $pngPath = (Get-CaseEvidenceBase -CaseId $caseId) + ".png"
   Write-CaseHeader -TxtPath $txtPath -CaseId $caseId -TargetMode "desktop_window"
 
-  $rootSession = $null
-  $appSession = $null
   $app = $null
   $notepad = $null
   $result = "PASS"
@@ -1060,27 +1399,25 @@ function Run-VGPassCase {
   try {
     Prepare-CleanEnvironment
     $app = Start-CaseAppWindow -CaseKey "p4t1-vg-pass" -AcceptedTitles @($appTitle)
-    $rootSession = Start-RootSession
-    $appSession = Start-AttachedWindowSession -WindowHandle $app.Process.MainWindowHandle
-    $null = $appSession
 
     $notepad = Start-NotepadWindow
-    Send-WebDriverChord -SessionId $rootSession -Keys @($wdKeys.Alt, " ")
+    Send-HotkeyWin32
     Wait-WindowVisibility -ProcessId $app.Process.Id -ExpectedVisible $false | Out-Null
 
     Focus-ProcessWindow -Process $notepad
-    Send-WebDriverChord -SessionId $rootSession -Keys @($wdKeys.Alt, " ")
+    Send-HotkeyWin32
     $refreshed = Wait-WindowVisibility -ProcessId $app.Process.Id -ExpectedVisible $true
     Wait-ForegroundHandle -ExpectedHandle $refreshed.MainWindowHandle
     Take-WindowShot -Path $pngPath
 
-    Send-WebDriverChord -SessionId $rootSession -Keys @($wdKeys.Alt, " ")
+    Send-HotkeyWin32
     Wait-WindowVisibility -ProcessId $app.Process.Id -ExpectedVisible $false | Out-Null
 
     Append-Text -TxtPath $txtPath -Line ""
     Append-Text -TxtPath $txtPath -Line "environment:"
     Append-Text -TxtPath $txtPath -Line "- webdriver_url: $WebDriverUrl"
     Append-Text -TxtPath $txtPath -Line "- vite_url: $viteUrl"
+    Append-Text -TxtPath $txtPath -Line "- keyboard_backend: $script:KeyboardBackend"
     Append-Text -TxtPath $txtPath -Line ""
     Append-Text -TxtPath $txtPath -Line "actual_result:"
     Append-Text -TxtPath $txtPath -Line "- screenshot: $pngPath"
@@ -1101,8 +1438,6 @@ function Run-VGPassCase {
     Append-Text -TxtPath $txtPath -Line ""
     Append-Text -TxtPath $txtPath -Line "conclusion: $result"
   } finally {
-    Stop-WebDriverSession -SessionId $appSession
-    Stop-WebDriverSession -SessionId $rootSession
     Stop-ProcessSafe -Process $notepad
     if ($app) { Stop-ProcessSafe -Process $app.Process }
     Stop-ViteServer
@@ -1118,8 +1453,6 @@ function Run-IGPassCase {
   $mp4Path = (Get-CaseEvidenceBase -CaseId $caseId) + ".mp4"
   Write-CaseHeader -TxtPath $txtPath -CaseId $caseId -TargetMode "desktop_window"
 
-  $rootSession = $null
-  $appSession = $null
   $app = $null
   $notepad = $null
   $recording = $null
@@ -1130,35 +1463,34 @@ function Run-IGPassCase {
   try {
     Prepare-CleanEnvironment
     $app = Start-CaseAppWindow -CaseKey "p4t1-ig-pass" -AcceptedTitles @($appTitle)
-    $rootSession = Start-RootSession
-    $appSession = Start-AttachedWindowSession -WindowHandle $app.Process.MainWindowHandle
     $recording = Start-ScreenRecording -Path $mp4Path
 
     Focus-ProcessWindow -Process $app.Process
-    Send-WebDriverChord -SessionId $rootSession -Keys @($wdKeys.Alt, " ")
+    Send-HotkeyWin32
     Wait-WindowVisibility -ProcessId $app.Process.Id -ExpectedVisible $false | Out-Null
 
     $notepad = Start-NotepadWindow
-    Send-WebDriverChord -SessionId $rootSession -Keys @($wdKeys.Alt, " ")
+    Send-HotkeyWin32
     $refreshed = Wait-WindowVisibility -ProcessId $app.Process.Id -ExpectedVisible $true
     Wait-ForegroundHandle -ExpectedHandle $refreshed.MainWindowHandle
 
-    Send-WebDriverChord -SessionId $appSession -Keys @($wdKeys.Shift, "n")
-    Send-WebDriverText -SessionId $appSession -Text $seriesName
-    Send-WebDriverChord -SessionId $appSession -Keys @($wdKeys.Enter)
-    Send-WebDriverText -SessionId $appSession -Text $commitContent
-    Send-WebDriverChord -SessionId $appSession -Keys @($wdKeys.Enter)
+    Send-KeyChordWin32 -Keys @($vkKeys.Shift, $vkKeys.N) -Description "Shift+N create series"
+    Send-TextWin32 -Text $seriesName
+    Send-KeyChordWin32 -Keys @($vkKeys.Enter) -Description "confirm series create" -PostDelayMs 400
+    Send-TextWin32 -Text $commitContent
+    Send-KeyChordWin32 -Keys @($vkKeys.Enter) -Description "confirm commit create" -PostDelayMs 400
     Start-Sleep -Seconds 1
 
     $sqliteEvidence = Assert-SqliteSeriesAndCommit -SeriesName $seriesName -CommitContent $commitContent
 
-    Send-WebDriverChord -SessionId $rootSession -Keys @($wdKeys.Alt, " ")
+    Send-HotkeyWin32
     Wait-WindowVisibility -ProcessId $app.Process.Id -ExpectedVisible $false | Out-Null
 
     Append-Text -TxtPath $txtPath -Line ""
     Append-Text -TxtPath $txtPath -Line "environment:"
     Append-Text -TxtPath $txtPath -Line "- webdriver_url: $WebDriverUrl"
     Append-Text -TxtPath $txtPath -Line "- vite_url: $viteUrl"
+    Append-Text -TxtPath $txtPath -Line "- keyboard_backend: $script:KeyboardBackend"
     Append-Text -TxtPath $txtPath -Line ""
     Append-Text -TxtPath $txtPath -Line "actual_result:"
     Append-Text -TxtPath $txtPath -Line "- recording: $mp4Path"
@@ -1192,8 +1524,6 @@ function Run-IGPassCase {
         Append-Text -TxtPath $txtPath -Line "recording_error: $($_.Exception.Message)"
       }
     }
-    Stop-WebDriverSession -SessionId $appSession
-    Stop-WebDriverSession -SessionId $rootSession
     Stop-ProcessSafe -Process $notepad
     if ($app) { Stop-ProcessSafe -Process $app.Process }
     Stop-ViteServer
@@ -1209,11 +1539,9 @@ function Run-VGFailCase {
   $pngPath = (Get-CaseEvidenceBase -CaseId $caseId) + ".png"
   Write-CaseHeader -TxtPath $txtPath -CaseId $caseId -TargetMode "desktop_window"
 
-  $rootSession = $null
   $app = $null
   $notepad = $null
   $helper = $null
-  $recoveryRoot = $null
   $recoveryApp = $null
   $result = "PASS"
 
@@ -1222,11 +1550,10 @@ function Run-VGFailCase {
     $helper = Start-HotkeyConflictHelper
     $app = Start-CaseAppWindow -CaseKey "p4t1-vg-fail" -AcceptedTitles @($hotkeyDisabledTitle)
     Wait-LogContains -Paths @($app.StdoutPath, $app.StderrPath, $helper.LogFile) -Pattern "global hotkey disabled"
-    $rootSession = Start-RootSession
     $notepad = Start-NotepadWindow
     $beforeHandle = [Win32Native]::GetForegroundWindow()
 
-    Send-WebDriverChord -SessionId $rootSession -Keys @($wdKeys.Alt, " ")
+    Send-HotkeyWin32 -PostDelayMs 1000
     Start-Sleep -Seconds 1
     $afterHandle = [Win32Native]::GetForegroundWindow()
     if ($afterHandle -eq $app.Process.MainWindowHandle) {
@@ -1239,8 +1566,6 @@ function Run-VGFailCase {
     Take-WindowShot -Path $pngPath
     $logExcerpt = Get-LogExcerpt -Paths @($app.StdoutPath, $app.StderrPath) -Pattern "global hotkey disabled"
 
-    Stop-WebDriverSession -SessionId $rootSession
-    $rootSession = $null
     Stop-ProcessSafe -Process $notepad
     $notepad = $null
     Stop-ProcessSafe -Process $app.Process
@@ -1250,19 +1575,19 @@ function Run-VGFailCase {
 
     Prepare-CleanEnvironment
     $recoveryApp = Start-CaseAppWindow -CaseKey "p4t1-vg-fail-recovery" -AcceptedTitles @($appTitle)
-    $recoveryRoot = Start-RootSession
     $notepad = Start-NotepadWindow
 
-    Send-WebDriverChord -SessionId $recoveryRoot -Keys @($wdKeys.Alt, " ")
+    Send-HotkeyWin32
     Wait-WindowVisibility -ProcessId $recoveryApp.Process.Id -ExpectedVisible $false | Out-Null
     Focus-ProcessWindow -Process $notepad
-    Send-WebDriverChord -SessionId $recoveryRoot -Keys @($wdKeys.Alt, " ")
+    Send-HotkeyWin32
     $recovered = Wait-WindowVisibility -ProcessId $recoveryApp.Process.Id -ExpectedVisible $true
     Wait-ForegroundHandle -ExpectedHandle $recovered.MainWindowHandle
 
     Append-Text -TxtPath $txtPath -Line ""
     Append-Text -TxtPath $txtPath -Line "actual_result:"
     Append-Text -TxtPath $txtPath -Line "- screenshot: $pngPath"
+    Append-Text -TxtPath $txtPath -Line "- keyboard_backend: $script:KeyboardBackend"
     Append-Text -TxtPath $txtPath -Line "- disabled_title: $hotkeyDisabledTitle"
     Append-Text -TxtPath $txtPath -Line "- recovery_title: $($recovered.MainWindowTitle)"
     Append-Text -TxtPath $txtPath -Line "- note: conflict helper prevented app raise, and recovery pass succeeded after helper shutdown"
@@ -1285,8 +1610,6 @@ function Run-VGFailCase {
     Append-Text -TxtPath $txtPath -Line ""
     Append-Text -TxtPath $txtPath -Line "conclusion: $result"
   } finally {
-    Stop-WebDriverSession -SessionId $rootSession
-    Stop-WebDriverSession -SessionId $recoveryRoot
     Stop-ProcessSafe -Process $notepad
     if ($app) { Stop-ProcessSafe -Process $app.Process }
     if ($recoveryApp) { Stop-ProcessSafe -Process $recoveryApp.Process }
@@ -1304,13 +1627,10 @@ function Run-IGFailCase {
   $mp4Path = (Get-CaseEvidenceBase -CaseId $caseId) + ".mp4"
   Write-CaseHeader -TxtPath $txtPath -CaseId $caseId -TargetMode "desktop_window"
 
-  $rootSession = $null
   $app = $null
   $notepad = $null
   $helper = $null
   $recording = $null
-  $recoveryRoot = $null
-  $recoverySession = $null
   $recoveryApp = $null
   $recoverySeries = "P4T1 Recovery"
   $recoveryCommit = "p4t1-recovery-note"
@@ -1321,12 +1641,11 @@ function Run-IGFailCase {
     $helper = Start-HotkeyConflictHelper
     $app = Start-CaseAppWindow -CaseKey "p4t1-ig-fail" -AcceptedTitles @($hotkeyDisabledTitle)
     Wait-LogContains -Paths @($app.StdoutPath, $app.StderrPath, $helper.LogFile) -Pattern "global hotkey disabled"
-    $rootSession = Start-RootSession
     $notepad = Start-NotepadWindow
     $recording = Start-ScreenRecording -Path $mp4Path
 
     for ($index = 0; $index -lt 3; $index++) {
-      Send-WebDriverChord -SessionId $rootSession -Keys @($wdKeys.Alt, " ")
+      Send-HotkeyWin32 -PostDelayMs 400
       Start-Sleep -Milliseconds 400
     }
 
@@ -1336,8 +1655,6 @@ function Run-IGFailCase {
 
     $logExcerpt = Get-LogExcerpt -Paths @($app.StdoutPath, $app.StderrPath) -Pattern "global hotkey disabled"
 
-    Stop-WebDriverSession -SessionId $rootSession
-    $rootSession = $null
     Stop-ProcessSafe -Process $notepad
     $notepad = $null
     Stop-ProcessSafe -Process $app.Process
@@ -1347,23 +1664,21 @@ function Run-IGFailCase {
 
     Prepare-CleanEnvironment
     $recoveryApp = Start-CaseAppWindow -CaseKey "p4t1-ig-fail-recovery" -AcceptedTitles @($appTitle)
-    $recoveryRoot = Start-RootSession
-    $recoverySession = Start-AttachedWindowSession -WindowHandle $recoveryApp.Process.MainWindowHandle
     $notepad = Start-NotepadWindow
 
     Focus-ProcessWindow -Process $recoveryApp.Process
-    Send-WebDriverChord -SessionId $recoveryRoot -Keys @($wdKeys.Alt, " ")
+    Send-HotkeyWin32
     Wait-WindowVisibility -ProcessId $recoveryApp.Process.Id -ExpectedVisible $false | Out-Null
     Focus-ProcessWindow -Process $notepad
-    Send-WebDriverChord -SessionId $recoveryRoot -Keys @($wdKeys.Alt, " ")
+    Send-HotkeyWin32
     $shown = Wait-WindowVisibility -ProcessId $recoveryApp.Process.Id -ExpectedVisible $true
     Wait-ForegroundHandle -ExpectedHandle $shown.MainWindowHandle
 
-    Send-WebDriverChord -SessionId $recoverySession -Keys @($wdKeys.Shift, "n")
-    Send-WebDriverText -SessionId $recoverySession -Text $recoverySeries
-    Send-WebDriverChord -SessionId $recoverySession -Keys @($wdKeys.Enter)
-    Send-WebDriverText -SessionId $recoverySession -Text $recoveryCommit
-    Send-WebDriverChord -SessionId $recoverySession -Keys @($wdKeys.Enter)
+    Send-KeyChordWin32 -Keys @($vkKeys.Shift, $vkKeys.N) -Description "Shift+N recovery create series"
+    Send-TextWin32 -Text $recoverySeries
+    Send-KeyChordWin32 -Keys @($vkKeys.Enter) -Description "confirm recovery series create" -PostDelayMs 400
+    Send-TextWin32 -Text $recoveryCommit
+    Send-KeyChordWin32 -Keys @($vkKeys.Enter) -Description "confirm recovery commit create" -PostDelayMs 400
     Start-Sleep -Seconds 1
 
     $sqliteEvidence = Assert-SqliteSeriesAndCommit -SeriesName $recoverySeries -CommitContent $recoveryCommit
@@ -1371,6 +1686,7 @@ function Run-IGFailCase {
     Append-Text -TxtPath $txtPath -Line ""
     Append-Text -TxtPath $txtPath -Line "actual_result:"
     Append-Text -TxtPath $txtPath -Line "- recording: $mp4Path"
+    Append-Text -TxtPath $txtPath -Line "- keyboard_backend: $script:KeyboardBackend"
     Append-Text -TxtPath $txtPath -Line "- action_chain: illegal hotkey spam under conflict -> helper removed -> hotkey recovery -> create recovery series and commit"
     Append-Text -TxtPath $txtPath -Line ""
     Append-Text -TxtPath $txtPath -Line "log_excerpt:"
@@ -1405,9 +1721,6 @@ function Run-IGFailCase {
         Append-Text -TxtPath $txtPath -Line "recording_error: $($_.Exception.Message)"
       }
     }
-    Stop-WebDriverSession -SessionId $rootSession
-    Stop-WebDriverSession -SessionId $recoverySession
-    Stop-WebDriverSession -SessionId $recoveryRoot
     Stop-ProcessSafe -Process $notepad
     if ($app) { Stop-ProcessSafe -Process $app.Process }
     if ($recoveryApp) { Stop-ProcessSafe -Process $recoveryApp.Process }
