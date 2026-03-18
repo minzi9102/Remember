@@ -8,8 +8,8 @@
 | 字段 | 值 |
 |---|---|
 | case_id | `P5-T1-VG-PASS` / `P5-T1-VG-FAIL` / `P5-T1-IG-PASS` / `P5-T1-IG-FAIL` |
-| skill_chain | `playwright`（默认） / `playwright + screenshot`（桌面回退） |
-| target_mode | `web_url`（默认） / `desktop_window`（回退） |
+| skill_chain | `视觉: playwright` / `交互: webdriver + screenshot` |
+| target_mode | `视觉: web_url` / `交互: desktop_window` |
 | setup | 黑盒启动 + 环境校验 |
 | steps | Codex 命令级步骤 |
 | oracle | 可观察判定（UI/日志/查询） |
@@ -24,6 +24,11 @@ $env:TESTER = 'codex'
 $env:RUN_DATE = (Get-Date -Format 'yyyyMMdd')
 $env:PW_BROWSER = 'msedge'
 ```
+
+## 2026-03-18 WebDriver 第二批迁移决议
+- 迁移交互门禁：`P5-T1-IG-PASS`、`P5-T1-IG-FAIL`。
+- 保留视觉门禁在 `playwright`，继续用于三模式回归看板、环境切换与基础可见性检查。
+- 迁移原因：`P5-T1` 现有失败记录已经表明，桌面采集链路虽可运行，但 `IG` 证据仍无法证明真实 Tauri 窗口上的“真闭环”；后续必须以 `WebDriver` 作为交互主路径补齐发布级证明。
 
 ## 视觉门禁
 ### P5-T1-VG-PASS
@@ -73,19 +78,20 @@ $env:PW_BROWSER = 'msedge'
 ## 交互门禁
 ### P5-T1-IG-PASS
 - case_id: `P5-T1-IG-PASS`
-- skill_chain: `playwright`
-- target_mode: `web_url`
+- skill_chain: `webdriver + screenshot`
+- target_mode: `desktop_window`
 - setup:
-  1. 使用会话 ID：`P5T1-IG-PASS`。
-  2. 准备一条合法交互链路（输入、提交、切换或导航）。
+  1. 使用 WebDriver 会话 ID：`P5T1-IG-PASS`。
+  2. 依次准备 `sqlite_only`、`postgres_only`、`dual_sync` 三种真实桌面运行模式。
+  3. 为每种模式准备一条最小合法交互链路，至少覆盖一次真实窗口激活、一次输入/提交、一次结果落库或列表回刷验证。
 - steps:
-  1. `open -> snapshot` 后执行合法交互链路。
-  2. 记录每一步操作与系统反馈。
-  3. 导出日志或查询结果作为交互佐证。
-  4. 关闭会话。
+  1. 通过 WebDriver 连接当前模式的 Tauri 主窗口并记录模式标识。
+  2. 在真实窗口中执行最小合法交互链路，验证输入、提交、导航或状态切换能完整闭环。
+  3. 对关键节点使用 `screenshot` 固化桌面证据，并导出日志或查询结果。
+  4. 在三种模式下重复执行，确认结果一致或按设计呈现差异。
 - oracle:
-  1. 交互链路完整，无卡死或不可恢复状态。
-  2. 结果可通过 UI + 日志/查询交叉验证。
+  1. 三模式下的真实窗口交互链路完整，无卡死、假成功或不可恢复状态。
+  2. 每种模式都能通过窗口状态 + 日志/查询证明“输入已生效且结果已闭环落地”。
 - evidence:
   - `P5-T1-IG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.mp4`
   - `P5-T1-IG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
@@ -95,17 +101,18 @@ $env:PW_BROWSER = 'msedge'
 
 ### P5-T1-IG-FAIL
 - case_id: `P5-T1-IG-FAIL`
-- skill_chain: `playwright`（必要时 `+ screenshot`）
-- target_mode: `web_url` 或 `desktop_window`
+- skill_chain: `webdriver + screenshot`
+- target_mode: `desktop_window`
 - setup:
-  1. 准备非法交互（无效输入、重复提交、冲突快捷键等）。
+  1. 准备非法交互（无效输入、重复提交、冲突快捷键、模式依赖异常或写入失败场景）。
+  2. 为三种运行模式分别准备对应的反向条件。
 - steps:
-  1. 触发非法交互并观察系统拦截。
-  2. 捕获错误提示与系统稳定性证据。
-  3. 立即执行一次合法交互验证可恢复。
+  1. 通过 WebDriver 在真实窗口中触发反向路径并观察系统拦截。
+  2. 捕获错误提示、失败日志、降级状态或写入未完成的桌面证据，并用 `screenshot` 留证。
+  3. 立即执行一次合法交互验证系统可恢复，避免将失败态误判为应用失效。
 - oracle:
-  1. 非法交互被拒绝并给出明确提示。
-  2. 系统不崩溃，合法操作可继续完成。
+  1. 反向路径被明确拦截或记录清晰失败信号，不能静默失败。
+  2. 系统不崩溃，恢复后合法交互可继续完成。
 - evidence:
   - `P5-T1-IG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.mp4`
   - `P5-T1-IG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
@@ -166,6 +173,8 @@ $env:PW_BROWSER = 'msedge'
 2. 交互证据未证明“真闭环”：
    `P5-T1-IG-PASS_20260318_ENV-SQLITE_codex.txt`、`P5-T1-IG-PASS_20260318_ENV-PG_codex.txt`、`P5-T1-IG-PASS_20260318_ENV-DUAL_codex.txt` 都出现重复 `Inbox` 系列记录，且 `Project-A` 仍为 `silent`，没有被证明已归档。
 3. 因第 1-2 项未满足，当前 12 组文件只能证明“桌面采集链路可运行”，不能证明 `P5-T1` 的发布级通过。
+4. 后续执行要求：
+   `P5-T1-IG-PASS` 与 `P5-T1-IG-FAIL` 改由 `WebDriver` 作为主执行链路，`playwright` 不再作为发布级交互证明的默认路径。
 
 ### 状态回写
 - `qa-gates/MASTER-TRACE-MATRIX.md`：`P5-T1 -> FAIL`
