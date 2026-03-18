@@ -55,6 +55,7 @@ $pwBrowser = "msedge"
 $vitePort = 1420
 $viteUrl = "http://127.0.0.1:${vitePort}"
 $evidenceResults = [ordered]@{}
+$baselineResults = [System.Collections.Generic.List[object]]::new()
 $backupDir = Join-Path $env:TEMP ("p5t1-backup-" + [guid]::NewGuid().ToString())
 $runtimeLogDir = Join-Path $env:TEMP ("p5t1-logs-" + [guid]::NewGuid().ToString())
 
@@ -550,6 +551,24 @@ function Add-EvidenceResult {
   }
 }
 
+function Add-BaselineResult {
+  param(
+    [string]$Name,
+    [string]$Result,
+    [string]$StdoutPath,
+    [string]$StderrPath,
+    [string]$Note
+  )
+
+  $baselineResults.Add([pscustomobject]@{
+      Name = $Name
+      Result = $Result
+      StdoutPath = $StdoutPath
+      StderrPath = $StderrPath
+      Note = $Note
+    })
+}
+
 function Run-VGPassCase {
   param(
     [string]$EnvId,
@@ -879,31 +898,42 @@ function Run-AutomationBaseline {
     $stdout = Join-Path $runtimeLogDir ("{0}.out.log" -f $command.Name)
     $stderr = Join-Path $runtimeLogDir ("{0}.err.log" -f $command.Name)
     $env:REMEMBER_TEST_POSTGRES_DSN = $tempPgDsn
-    $process = Start-Process `
-      -FilePath $command.File `
-      -ArgumentList $command.Args `
-      -WorkingDirectory $root `
-      -Wait `
-      -PassThru `
-      -RedirectStandardOutput $stdout `
-      -RedirectStandardError $stderr
-    if ($process.ExitCode -ne 0) {
-      throw "$($command.Name) failed with exit code $($process.ExitCode)"
+    try {
+      $process = Start-Process `
+        -FilePath $command.File `
+        -ArgumentList $command.Args `
+        -WorkingDirectory $root `
+        -Wait `
+        -PassThru `
+        -RedirectStandardOutput $stdout `
+        -RedirectStandardError $stderr
+
+      if ($process.ExitCode -eq 0) {
+        Add-BaselineResult -Name $command.Name -Result "PASS" -StdoutPath $stdout -StderrPath $stderr -Note "exit code 0"
+      } else {
+        Add-BaselineResult -Name $command.Name -Result "FAIL" -StdoutPath $stdout -StderrPath $stderr -Note ("exit code {0}" -f $process.ExitCode)
+      }
+    } catch {
+      Add-BaselineResult -Name $command.Name -Result "BLOCKED" -StdoutPath $stdout -StderrPath $stderr -Note $_.Exception.Message
     }
   }
 }
 
 function Write-Summary {
   $ordered = $evidenceResults.Values | Sort-Object EnvId, CaseId
-  $overall = if ($ordered.Result -contains "FAIL") {
+  $baselineState = $baselineResults.Result
+  $overall = if ($baselineState -contains "FAIL" -or $ordered.Result -contains "FAIL") {
     "FAIL"
-  } elseif ($ordered.Result -contains "BLOCKED") {
+  } elseif ($baselineState -contains "BLOCKED" -or $ordered.Result -contains "BLOCKED") {
     "BLOCKED"
   } else {
     "PASS"
   }
 
   Write-Output "overall=$overall"
+  foreach ($entry in $baselineResults) {
+    Write-Output ("BASELINE {0} {1} {2}" -f $entry.Name, $entry.Result, $entry.Note)
+  }
   foreach ($entry in $ordered) {
     Write-Output ("{0} {1} {2}" -f $entry.EnvId, $entry.CaseId, $entry.Result)
   }
