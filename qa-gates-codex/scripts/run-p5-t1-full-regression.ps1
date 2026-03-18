@@ -883,10 +883,10 @@ function Run-AutomationBaseline {
       -FilePath $command.File `
       -ArgumentList $command.Args `
       -WorkingDirectory $root `
+      -Wait `
       -PassThru `
       -RedirectStandardOutput $stdout `
       -RedirectStandardError $stderr
-    Wait-Process -Id $process.Id
     if ($process.ExitCode -ne 0) {
       throw "$($command.Name) failed with exit code $($process.ExitCode)"
     }
