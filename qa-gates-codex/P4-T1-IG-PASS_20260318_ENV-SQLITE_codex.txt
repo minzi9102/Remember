@@ -1,0 +1,17 @@
+case_id: P4-T1-IG-PASS
+target_mode: desktop_window
+env_id: ENV-SQLITE
+runtime_mode: sqlite_only
+run_date: 20260318
+tester: codex
+structure: environment -> steps -> actual_result -> log_excerpt -> sqlite_proof -> conclusion
+
+environment:
+- webdriver_url: http://127.0.0.1:4723
+- vite_url: http://127.0.0.1:1420
+
+actual_result:
+- blocked_reason: webdriver server unreachable at http://127.0.0.1:4723/status
+- visual_evidence: not produced because precheck blocked before case execution
+
+conclusion: BLOCKED
