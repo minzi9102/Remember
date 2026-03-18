@@ -9,14 +9,12 @@ use sqlx::{postgres::PgPool, sqlite::SqlitePool};
 use uuid::Uuid;
 
 use super::{
-    map_sqlx_error, maybe_inject_test_failure, AppendCommitInput, AppendCommitResult,
-    ArchiveSeriesInput, ArchiveSeriesResult, CreateSeriesInput, ListSeriesQuery,
-    MarkSilentSeriesInput, MarkSilentSeriesResult, MemoRepository, PagedResult,
-    PostgresRepository, RepositoryError, SearchSeriesQuery, SeriesRecord, SqliteRepository,
-    TimelineQuery,
+    map_sqlx_error, maybe_inject_test_failure, postgres::apply_postgres_tx_deadlines,
+    AppendCommitInput, AppendCommitResult, ArchiveSeriesInput, ArchiveSeriesResult,
+    CreateSeriesInput, ListSeriesQuery, MarkSilentSeriesInput, MarkSilentSeriesResult,
+    MemoRepository, PagedResult, PostgresRepository, RepositoryError, SearchSeriesQuery,
+    SeriesRecord, SqliteRepository, TimelineQuery,
 };
-
-const POSTGRES_SNAPSHOT_TIMEOUT_SQL: &str = "SET LOCAL statement_timeout = '3s'";
 
 #[derive(Debug, Clone)]
 pub struct DualSyncRepository {
@@ -106,9 +104,15 @@ impl StartupSelfHealOperation {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum StartupSelfHealDetail {
-    CreateSeries { series_id: String },
-    AppendCommit { series_id: String },
-    ArchiveSeries { series_id: String },
+    CreateSeries {
+        series_id: String,
+    },
+    AppendCommit {
+        series_id: String,
+    },
+    ArchiveSeries {
+        series_id: String,
+    },
     MarkSilentSeries {
         threshold_before: String,
         affected_series_ids: Vec<String>,
@@ -244,19 +248,24 @@ impl DualSyncRepository {
         .await
         .map_err(map_sqlx_error)?;
 
-        Ok(row.map(|(status, latest_excerpt, last_updated_at, archived_at)| SeriesSnapshot {
-            status,
-            latest_excerpt,
-            last_updated_at,
-            archived_at,
-        }))
+        Ok(row.map(
+            |(status, latest_excerpt, last_updated_at, archived_at)| SeriesSnapshot {
+                status,
+                latest_excerpt,
+                last_updated_at,
+                archived_at,
+            },
+        ))
     }
 
     async fn load_postgres_series_snapshot(
         &self,
         series_id: &str,
     ) -> Result<SeriesSnapshot, RepositoryError> {
-        let Some(snapshot) = self.load_postgres_series_snapshot_optional(series_id).await? else {
+        let Some(snapshot) = self
+            .load_postgres_series_snapshot_optional(series_id)
+            .await?
+        else {
             return Err(RepositoryError::not_found(format!(
                 "series `{series_id}` does not exist in postgres"
             )));
@@ -270,10 +279,7 @@ impl DualSyncRepository {
         series_id: &str,
     ) -> Result<Option<SeriesSnapshot>, RepositoryError> {
         let mut tx = self.postgres.pool().begin().await.map_err(map_sqlx_error)?;
-        sqlx::query(POSTGRES_SNAPSHOT_TIMEOUT_SQL)
-            .execute(&mut *tx)
-            .await
-            .map_err(map_sqlx_error)?;
+        apply_postgres_tx_deadlines(&mut tx).await?;
 
         let row: Option<(String, String, String, Option<String>)> = sqlx::query_as(
             "SELECT
@@ -291,13 +297,16 @@ impl DualSyncRepository {
         .fetch_optional(&mut *tx)
         .await
         .map_err(map_sqlx_error)?;
+        tx.rollback().await.map_err(map_sqlx_error)?;
 
-        Ok(row.map(|(status, latest_excerpt, last_updated_at, archived_at)| SeriesSnapshot {
-            status,
-            latest_excerpt,
-            last_updated_at,
-            archived_at,
-        }))
+        Ok(row.map(
+            |(status, latest_excerpt, last_updated_at, archived_at)| SeriesSnapshot {
+                status,
+                latest_excerpt,
+                last_updated_at,
+                archived_at,
+            },
+        ))
     }
 
     async fn rollback_sqlite_create_series(&self, series_id: &str) -> Result<(), RepositoryError> {
@@ -315,11 +324,14 @@ impl DualSyncRepository {
         series_id: &str,
     ) -> Result<(), RepositoryError> {
         maybe_inject_test_failure("postgres", "rollback_create_series", series_id)?;
+        let mut tx = self.postgres.pool().begin().await.map_err(map_sqlx_error)?;
+        apply_postgres_tx_deadlines(&mut tx).await?;
         sqlx::query("DELETE FROM series WHERE id = $1")
             .bind(series_id)
-            .execute(self.postgres.pool())
+            .execute(&mut *tx)
             .await
             .map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
         Ok(())
     }
 
@@ -355,6 +367,8 @@ impl DualSyncRepository {
         snapshot: &SeriesSnapshot,
     ) -> Result<(), RepositoryError> {
         maybe_inject_test_failure("postgres", "restore_series_snapshot", series_id)?;
+        let mut tx = self.postgres.pool().begin().await.map_err(map_sqlx_error)?;
+        apply_postgres_tx_deadlines(&mut tx).await?;
         sqlx::query(
             "UPDATE series
              SET status = $1,
@@ -368,9 +382,10 @@ impl DualSyncRepository {
         .bind(&snapshot.last_updated_at)
         .bind(snapshot.archived_at.as_deref())
         .bind(series_id)
-        .execute(self.postgres.pool())
+        .execute(&mut *tx)
         .await
         .map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
 
         Ok(())
     }
@@ -419,6 +434,7 @@ impl DualSyncRepository {
     ) -> Result<(), RepositoryError> {
         maybe_inject_test_failure("postgres", "rollback_append_commit", commit_id)?;
         let mut tx = self.postgres.pool().begin().await.map_err(map_sqlx_error)?;
+        apply_postgres_tx_deadlines(&mut tx).await?;
 
         sqlx::query("DELETE FROM commits WHERE id = $1")
             .bind(commit_id)
@@ -486,6 +502,7 @@ impl DualSyncRepository {
             &format_affected_series_ids(affected_series_ids),
         )?;
         let mut tx = self.postgres.pool().begin().await.map_err(map_sqlx_error)?;
+        apply_postgres_tx_deadlines(&mut tx).await?;
         for series_id in affected_series_ids {
             sqlx::query("UPDATE series SET status = 'active' WHERE id = $1")
                 .bind(series_id)
@@ -580,13 +597,15 @@ impl DualSyncRepository {
 
             Ok::<Vec<ConsistencyAlertRecord>, RepositoryError>(
                 rows.into_iter()
-                    .map(|(id, op_type, commit_id, reason, created_at)| ConsistencyAlertRecord {
-                        id,
-                        op_type,
-                        commit_id,
-                        reason,
-                        created_at,
-                    })
+                    .map(
+                        |(id, op_type, commit_id, reason, created_at)| ConsistencyAlertRecord {
+                            id,
+                            op_type,
+                            commit_id,
+                            reason,
+                            created_at,
+                        },
+                    )
                     .collect(),
             )
         };
@@ -607,13 +626,15 @@ impl DualSyncRepository {
 
             Ok::<Vec<ConsistencyAlertRecord>, RepositoryError>(
                 rows.into_iter()
-                    .map(|(id, op_type, commit_id, reason, created_at)| ConsistencyAlertRecord {
-                        id,
-                        op_type,
-                        commit_id,
-                        reason,
-                        created_at,
-                    })
+                    .map(
+                        |(id, op_type, commit_id, reason, created_at)| ConsistencyAlertRecord {
+                            id,
+                            op_type,
+                            commit_id,
+                            reason,
+                            created_at,
+                        },
+                    )
                     .collect(),
             )
         };
@@ -773,7 +794,10 @@ impl DualSyncRepository {
         snapshot: &SeriesSnapshot,
     ) -> Result<(), RepositoryError> {
         match side {
-            BackendSide::Sqlite => self.restore_sqlite_series_snapshot(series_id, snapshot).await,
+            BackendSide::Sqlite => {
+                self.restore_sqlite_series_snapshot(series_id, snapshot)
+                    .await
+            }
             BackendSide::Postgres => {
                 self.restore_postgres_series_snapshot(series_id, snapshot)
                     .await
@@ -876,9 +900,8 @@ fn merge_unresolved_alerts(
 fn parse_consistency_alert(
     alert: &ConsistencyAlertRecord,
 ) -> Result<ParsedConsistencyAlert, String> {
-    let op_type = StartupSelfHealOperation::from_op_type(&alert.op_type).ok_or_else(|| {
-        format!("unsupported consistency alert op_type `{}`", alert.op_type)
-    })?;
+    let op_type = StartupSelfHealOperation::from_op_type(&alert.op_type)
+        .ok_or_else(|| format!("unsupported consistency alert op_type `{}`", alert.op_type))?;
     let succeeded_side = parse_backend_side_field(&alert.reason, "succeeded_side=")?;
     let failed_side = parse_backend_side_field(&alert.reason, "failed_side=")?;
     let detail = extract_detail_segment(&alert.reason)?;
@@ -1028,8 +1051,10 @@ fn is_pg_timeout_error(error: &RepositoryError) -> bool {
         RepositoryError::Storage(message) | RepositoryError::DualWriteFailed(message) => {
             let normalized = message.to_ascii_lowercase();
             normalized.contains("statement timeout")
+                || normalized.contains("lock timeout")
                 || normalized.contains("query_canceled")
                 || normalized.contains("57014")
+                || normalized.contains("55p03")
                 || normalized.contains("canceling statement")
         }
         _ => false,
@@ -1284,12 +1309,7 @@ impl MemoRepository for DualSyncRepository {
     ) -> Result<AppendCommitResult, RepositoryError> {
         let series_id = input.series_id.clone();
         let commit_id = input.commit_id.clone();
-        let sqlite_snapshot_future = self.load_sqlite_series_snapshot(&series_id);
-        let postgres_snapshot_future = self.load_postgres_series_snapshot(&series_id);
-        let (sqlite_snapshot_result, postgres_snapshot_result) =
-            tokio::join!(sqlite_snapshot_future, postgres_snapshot_future);
-        let sqlite_snapshot = sqlite_snapshot_result?;
-        let postgres_snapshot = postgres_snapshot_result?;
+        let sqlite_snapshot = self.load_sqlite_series_snapshot(&series_id).await?;
 
         let sqlite_future = self.sqlite.append_commit(input.clone());
         let postgres_future = self.postgres.append_commit(input);
@@ -1399,7 +1419,9 @@ impl MemoRepository for DualSyncRepository {
                     .write_consistency_alert("append_commit", &commit_id, &alert_reason)
                     .await;
                 let compensation_result = self
-                    .rollback_postgres_append_commit(&commit_id, &series_id, &postgres_snapshot)
+                    // The dual_sync invariant requires both backends to share the same
+                    // pre-write series snapshot before we fan out the append.
+                    .rollback_postgres_append_commit(&commit_id, &series_id, &sqlite_snapshot)
                     .await;
                 match compensation_result {
                     Ok(()) => {

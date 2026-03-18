@@ -1,10 +1,11 @@
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
-use sqlx::postgres::{PgPool, PgPoolOptions};
+use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use tauri::{AppHandle, Manager, Runtime};
 use uuid::Uuid;
@@ -16,7 +17,8 @@ use super::dto::{
 use crate::repository::{
     self, AppendCommitInput, ArchiveSeriesInput, CommitRecord, CreateSeriesInput,
     DynMemoRepository, ListSeriesQuery, MarkSilentSeriesInput, RepositoryError, SearchSeriesQuery,
-    SeriesRecord, StartupSelfHealSummary, TimelineQuery,
+    SeriesRecord, StartupSelfHealSummary, TimelineQuery, POSTGRES_APPLICATION_NAME,
+    POSTGRES_LOCK_TIMEOUT, POSTGRES_STATEMENT_TIMEOUT,
 };
 
 const SQLITE_DB_FILE_NAME: &str = "remember.sqlite3";
@@ -401,9 +403,20 @@ async fn connect_sqlite_pool(database_path: &PathBuf) -> Result<SqlitePool, Appl
 
 async fn connect_postgres_pool(postgres_dsn: &str) -> Result<PgPool, ApplicationError> {
     let dsn = validate_non_empty(postgres_dsn, "postgres_dsn")?;
+    let options = PgConnectOptions::from_str(&dsn)
+        .map_err(|error| {
+            ApplicationError::internal(format!(
+                "failed to parse configured postgres_dsn into connect options: {error}"
+            ))
+        })?
+        .application_name(POSTGRES_APPLICATION_NAME)
+        .options([
+            ("statement_timeout", POSTGRES_STATEMENT_TIMEOUT),
+            ("lock_timeout", POSTGRES_LOCK_TIMEOUT),
+        ]);
     PgPoolOptions::new()
         .max_connections(1)
-        .connect(&dsn)
+        .connect_with(options)
         .await
         .map_err(|error| {
             ApplicationError::internal(format!(

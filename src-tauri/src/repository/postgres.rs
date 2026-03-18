@@ -8,7 +8,7 @@ use super::{
     validate_limit, validate_non_empty, AppendCommitInput, AppendCommitResult, ArchiveSeriesInput,
     ArchiveSeriesResult, CommitRecord, CreateSeriesInput, ListSeriesQuery, MarkSilentSeriesInput,
     MarkSilentSeriesResult, MemoRepository, PagedResult, RepositoryError, SearchSeriesQuery,
-    SeriesRecord, SeriesStatus, TimelineQuery,
+    SeriesRecord, SeriesStatus, TimelineQuery, POSTGRES_LOCK_TIMEOUT, POSTGRES_STATEMENT_TIMEOUT,
 };
 
 const SERIES_SELECT: &str = r#"
@@ -34,8 +34,6 @@ SELECT
     to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at
 FROM commits
 "#;
-
-const POSTGRES_WRITE_TIMEOUT_SQL: &str = "SET LOCAL statement_timeout = '3s'";
 
 #[derive(Debug, Clone)]
 pub struct PostgresRepository {
@@ -84,7 +82,7 @@ impl MemoRepository for PostgresRepository {
         maybe_inject_test_failure("postgres", "create_series", &id)?;
 
         let mut tx = self.pool.begin().await.map_err(map_sqlx_error)?;
-        apply_postgres_write_timeout(&mut tx).await?;
+        apply_postgres_tx_deadlines(&mut tx).await?;
 
         sqlx::query(
             "INSERT INTO series (
@@ -171,7 +169,7 @@ impl MemoRepository for PostgresRepository {
         let latest_excerpt = excerpt(&content);
 
         let mut tx = self.pool.begin().await.map_err(map_sqlx_error)?;
-        apply_postgres_write_timeout(&mut tx).await?;
+        apply_postgres_tx_deadlines(&mut tx).await?;
 
         let status: Option<String> = sqlx::query_scalar("SELECT status FROM series WHERE id = $1")
             .bind(&series_id)
@@ -289,7 +287,7 @@ impl MemoRepository for PostgresRepository {
         let archived_at = validate_non_empty(&input.archived_at, "archivedAt")?;
 
         let mut tx = self.pool.begin().await.map_err(map_sqlx_error)?;
-        apply_postgres_write_timeout(&mut tx).await?;
+        apply_postgres_tx_deadlines(&mut tx).await?;
 
         let existing: Option<(String, Option<String>)> = sqlx::query_as(
             "SELECT
@@ -345,7 +343,7 @@ impl MemoRepository for PostgresRepository {
         let threshold_before = validate_non_empty(&input.threshold_before, "thresholdBefore")?;
 
         let mut tx = self.pool.begin().await.map_err(map_sqlx_error)?;
-        apply_postgres_write_timeout(&mut tx).await?;
+        apply_postgres_tx_deadlines(&mut tx).await?;
 
         let affected_series_ids: Vec<String> = sqlx::query_scalar(
             "SELECT id
@@ -433,10 +431,21 @@ fn commit_from_row(row: CommitRow) -> CommitRecord {
     }
 }
 
-async fn apply_postgres_write_timeout(
+pub(crate) async fn apply_postgres_tx_deadlines(
     tx: &mut sqlx::Transaction<'_, Postgres>,
 ) -> Result<(), RepositoryError> {
-    sqlx::query(POSTGRES_WRITE_TIMEOUT_SQL)
+    set_local_timeout(tx, "statement_timeout", POSTGRES_STATEMENT_TIMEOUT).await?;
+    set_local_timeout(tx, "lock_timeout", POSTGRES_LOCK_TIMEOUT).await?;
+    Ok(())
+}
+
+async fn set_local_timeout(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    setting_name: &str,
+    setting_value: &str,
+) -> Result<(), RepositoryError> {
+    let sql = format!("SET LOCAL {setting_name} = '{setting_value}'");
+    sqlx::query(&sql)
         .execute(&mut **tx)
         .await
         .map_err(map_sqlx_error)?;

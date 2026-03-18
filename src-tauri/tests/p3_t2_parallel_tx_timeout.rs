@@ -1,10 +1,14 @@
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use sqlx::{postgres::PgPoolOptions, sqlite::SqlitePoolOptions};
+use sqlx::{
+    postgres::{PgConnectOptions, PgPoolOptions},
+    sqlite::SqlitePoolOptions,
+};
 use tauri_app_lib::repository;
 use tauri_app_lib::repository::migrations::{run_postgres_migrations, run_sqlite_migrations};
 use tauri_app_lib::repository::{
     AppendCommitInput, CreateSeriesInput, MemoRepository, RepositoryError,
+    POSTGRES_APPLICATION_NAME, POSTGRES_LOCK_TIMEOUT, POSTGRES_STATEMENT_TIMEOUT,
 };
 
 #[tokio::test]
@@ -28,14 +32,29 @@ async fn p3_t2_dual_sync_enforces_postgres_statement_timeout_and_recovers() {
         .await
         .expect("failed to run sqlite migrations for p3-t2");
 
+    let postgres_options: PgConnectOptions = postgres_dsn
+        .parse()
+        .expect("failed to parse postgres dsn for p3-t2");
     let postgres_pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(&postgres_dsn)
+        .connect_with(
+            postgres_options
+                .application_name(POSTGRES_APPLICATION_NAME)
+                .options([
+                    ("statement_timeout", POSTGRES_STATEMENT_TIMEOUT),
+                    ("lock_timeout", POSTGRES_LOCK_TIMEOUT),
+                ]),
+        )
         .await
         .expect("failed to connect postgres for p3-t2");
     run_postgres_migrations(&postgres_pool)
         .await
         .expect("failed to run postgres migrations for p3-t2");
+    let lock_pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&postgres_dsn)
+        .await
+        .expect("failed to connect lock postgres pool for p3-t2");
 
     let prefix = format!("p3t2-timeout-{}", nonce());
     cleanup_postgres_prefix(&postgres_pool, &prefix).await;
@@ -50,8 +69,9 @@ async fn p3_t2_dual_sync_enforces_postgres_statement_timeout_and_recovers() {
         })
         .await
         .expect("dual create_series should succeed before timeout probe");
+    assert_postgres_session_timeouts(&postgres_pool).await;
 
-    let mut lock_tx = postgres_pool
+    let mut lock_tx = lock_pool
         .begin()
         .await
         .expect("failed to start postgres lock transaction");
@@ -73,8 +93,8 @@ async fn p3_t2_dual_sync_enforces_postgres_statement_timeout_and_recovers() {
     let elapsed = started.elapsed();
 
     assert!(
-        elapsed >= Duration::from_secs(3),
-        "expected timeout >= 3s, got {elapsed:?}"
+        elapsed >= Duration::from_millis(2500),
+        "expected timeout close to 3s and not too early, got {elapsed:?}"
     );
     assert!(
         elapsed <= Duration::from_millis(4500),
@@ -103,6 +123,20 @@ async fn p3_t2_dual_sync_enforces_postgres_statement_timeout_and_recovers() {
     cleanup_postgres_prefix(&postgres_pool, &prefix).await;
 }
 
+async fn assert_postgres_session_timeouts(pool: &sqlx::PgPool) {
+    let statement_timeout: String = sqlx::query_scalar("SHOW statement_timeout")
+        .fetch_one(pool)
+        .await
+        .expect("failed to read postgres statement_timeout for p3-t2");
+    assert_eq!(statement_timeout, POSTGRES_STATEMENT_TIMEOUT);
+
+    let lock_timeout: String = sqlx::query_scalar("SHOW lock_timeout")
+        .fetch_one(pool)
+        .await
+        .expect("failed to read postgres lock_timeout for p3-t2");
+    assert_eq!(lock_timeout, POSTGRES_LOCK_TIMEOUT);
+}
+
 fn assert_timeout_error(error: RepositoryError) {
     let message = match error {
         RepositoryError::PgTimeout(message) | RepositoryError::Storage(message) => message,
@@ -111,8 +145,10 @@ fn assert_timeout_error(error: RepositoryError) {
     let normalized = message.to_ascii_lowercase();
     assert!(
         normalized.contains("statement timeout")
+            || normalized.contains("lock timeout")
             || normalized.contains("query_canceled")
-            || normalized.contains("57014"),
+            || normalized.contains("57014")
+            || normalized.contains("55p03"),
         "expected postgres timeout signal in error message, got `{message}`"
     );
 }

@@ -18,6 +18,10 @@ pub use postgres::PostgresRepository;
 #[allow(unused_imports)]
 pub use sqlite::SqliteRepository;
 
+pub const POSTGRES_APPLICATION_NAME: &str = "remember";
+pub const POSTGRES_STATEMENT_TIMEOUT: &str = "3s";
+pub const POSTGRES_LOCK_TIMEOUT: &str = "2800ms";
+
 const DEFAULT_PAGE_LIMIT: u64 = 50;
 const MAX_PAGE_LIMIT: u64 = 200;
 const TEST_FAILURE_INJECTION_ENV: &str = "REMEMBER_TEST_REPOSITORY_INJECT_FAILURE";
@@ -386,9 +390,13 @@ fn map_database_error(error: Box<dyn sqlx::error::DatabaseError>) -> RepositoryE
     let code = error.code().map(|value| value.to_string());
 
     if matches!(code.as_deref(), Some("57014"))
+        || matches!(code.as_deref(), Some("55P03"))
         || message
             .to_ascii_lowercase()
             .contains("canceling statement due to statement timeout")
+        || message
+            .to_ascii_lowercase()
+            .contains("canceling statement due to lock timeout")
     {
         return RepositoryError::pg_timeout(message);
     }
