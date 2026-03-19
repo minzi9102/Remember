@@ -69,7 +69,7 @@
 1. 命名必须遵循 qa-gates/EVIDENCE-NAMING.md。
 2. 每条用例至少提交 1 份视觉证据 + 1 份交互证据。
 3. 文本证据需包含：执行环境、步骤编号、实际结果、结论。
-4. 若涉及数据库一致性，附 SQLite 与 PostgreSQL 查询截图或导出文本。
+4. 若涉及数据库一致性，附 SQLite 查询截图或导出文本。
 
 ## 通过标准
 1. P4-T1-VG-PASS 与 P4-T1-IG-PASS 均通过。
@@ -91,5 +91,5 @@ phase-4 t1 blackbox visual-gate interaction-gate 热键可见切换
 
 ### 追踪映射
 - DEV.md 映射：tauri-plugin-global-shortcut
-- ROADMAP.md 映射：Phase 4 / 子任务 1
+- ROADMAP.md 映射：Phase 3 / 已完成能力
 

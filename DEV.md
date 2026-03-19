@@ -1,10 +1,10 @@
 # Remember v1 技术定义（SQLite-only）
 
 ## Summary
-- 当前分支的唯一运行模式是 `sqlite_only`。
-- 技术栈固定为 `Tauri 2 + React + TypeScript + Rust + sqlx(sqlite)`。
+- 当前分支唯一运行模式是 `sqlite_only`，技术栈固定为 `Tauri 2 + React + TypeScript + Rust + sqlx(sqlite)`。
 - 前端通过 Tauri `invoke` 调用 Rust RPC 适配层；当前没有 HTTP API，也没有运行时后端切换。
-- 本文档只记录当前代码已经实现并验证过的技术事实，不承诺已删除的多数据库路线回归。
+- 本文档包含两类内容：`已实现技术事实` 与 `Cross-Axis vNext 前端目标契约`。
+- 截至 2026-03-19，vNext 前端契约尚未全部落地，属于定稿待实现范围。
 
 ## 当前实现快照
 - 前端：`React 19`、`TypeScript`、`Vite`。
@@ -50,12 +50,12 @@
 - 否则使用平台 app data 目录下的 `remember.sqlite3`。
 - 若平台目录不可用，则回退到当前工作目录下的 `remember.sqlite3`。
 
-## 公共契约
+## 公共契约（已实现）
 
 ### RPC 入口
 - 调用方式固定为 Tauri `invoke`。
 - 路径风格固定为 `RPC 点号命名`。
-- 当前已实现的命令只有以下 6 个：
+- 当前已实现命令如下：
 
 | Path | Request | Response(data) |
 |---|---|---|
@@ -107,6 +107,39 @@
 - `mark_silent_series`
 - `search_series_by_name`
 
+## 前端交互契约 vNext（目标态，待实现）
+
+### 变更边界
+- 本轮契约变更只涉及前端交互语义与输入焦点状态机。
+- 后端 RPC 路径、DTO、Repository trait、SQLite schema 不发生新增或破坏性变更。
+- `series.create / series.list / commit.append / timeline.list / series.archive / series.scan_silent` 继续作为唯一业务接口。
+
+### 目标交互模型
+- 主轴：屏幕上方横向 Active Series 轨道，最新更新项固定最左。
+- 副轴：当前高亮 Series 的 Timeline 在卡片下方纵向展开。
+- 输入分层：
+  - 附着草稿框：直接输入触发，绑定当前高亮 Series。
+  - 全局悬浮条：`/` 与 `Shift+N` 触发，浮于主轨道下方。
+- 归档切换：右上 `Archived` 按钮为唯一集合切换入口（`mouse-only`）。
+
+### 键位语义表（目标态）
+| 场景 | 按键 | 目标行为 |
+|---|---|---|
+| 主轨道浏览 | `← / →` | 左右切换当前高亮 Series |
+| 主轨道进入 Timeline | `↓` | 在当前卡片下方展开纵向 Timeline |
+| Timeline 浏览 | `↑ / ↓` | 按时间倒序滚动历史 Commit |
+| Timeline 返回主轨道 | `Esc` | 关闭 Timeline 并返回横向主轨道焦点 |
+| 全局搜索浮层 | `/` | 打开全局搜索输入条（仅过滤 Series 名称） |
+| 全局新建浮层 | `Shift+N` | 打开全局新建 Series 输入条 |
+| 附着草稿 | 直接输入字符 | 在当前高亮 Series 下打开草稿输入 |
+| 草稿提交 | `Enter` | 提交 Commit，并将该 Series 置顶到最左 |
+| 一键归档 | `a` | 仅当高亮项是 silent 时执行逻辑归档 |
+
+### 只读与约束
+- Timeline 全程只读，不提供历史编辑入口。
+- Archived 集合下不允许追加 Commit 与新建 Series。
+- 搜索仅过滤 Series 名称，不检索 Commit 正文。
+
 ## SQLite Schema
 
 ### 核心表
@@ -136,18 +169,18 @@
 
 ### `startup_self_heal`
 - RPC meta 仍会返回 `startupSelfHeal` 对象。
-- 当前 bootstrap 使用 `StartupSelfHealSummary::clean()`，因此默认值为零计数和固定占位时间。
+- 当前 bootstrap 使用 `StartupSelfHealSummary::clean()`，默认值为零计数和固定占位时间。
 - 这代表“诊断字段仍保留”，不代表系统已经实现启动期自愈扫描。
 
 ### `src-tauri/migrations/postgres`
 - 仓库中仍保留旧的 Postgres migration 目录。
-- 它不是当前运行模式的一部分，也不应再被文档表述为可选后端。
+- 它不是当前运行模式的一部分，也不应再被表述为可选后端。
 - 是否彻底删除该遗留目录，应由后续独立任务决策与执行。
 
 ## 测试基线（文档更新时已验证）
-- `npm run test:unit`：通过。
-- `cargo test`（`src-tauri`）：通过。
-- 当前基线用于说明“文档整理没有改变现有代码行为”。
+- `npm run test:unit`：未在本次文档任务中执行。
+- `cargo test`（`src-tauri`）：未在本次文档任务中执行。
+- 本次变更仅更新定义文档，不涉及代码路径变更。
 
 ## 不再承诺的路线
 - 不再承诺 Postgres 运行时支持。
