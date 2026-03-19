@@ -1,0 +1,51 @@
+case_id: P5-T1-IG-FAIL
+target_mode: desktop_window
+review_mode: human_step_input
+env_id: ENV-DUAL
+runtime_mode: dual_sync
+run_date: 20260319
+tester: codex
+structure: environment -> steps_or_checklist -> observer_result -> db_proof -> conclusion
+
+environment:
+- vite_url: http://127.0.0.1:1420
+- desktop_title: tauri-app [dual_sync]
+- recovery_series: P5T1-ENV-DUAL-RECOVERY-d7f064a4
+- recovery_commit: p5t1-recovery-note-d7f064a4
+
+step_id: step_1_empty_create
+instruction: Press Shift+N, submit an empty create request, and confirm a visible validation or failure message appears.
+human_result: FAIL
+human_note: manual desktop interaction not executed in unattended rerun
+screenshot: D:\BME2026\TECHNICAL\Remember\qa-gates-codex\P5-T1-IG-FAIL_20260319_ENV-DUAL_codex-step1-empty-create.png
+db_assertion_result: PASS
+db_proof:
+- backend=sqlite
+- series_order=Anchor Series:active:anchor-note | Project-A:silent:follow-up-note
+- anchor_status=active
+- project_a_status=silent
+- project_a_archived_at=
+- named_series_count=0
+- named_series_id=
+- named_series_status=
+- named_series_excerpt=
+- named_commit_count=0
+- backend=postgres
+- series_order=Anchor Series:active:anchor-note | Project-A:silent:follow-up-note
+- anchor_status=active
+- project_a_status=silent
+- project_a_archived_at=
+- named_series_count=0
+- named_series_id=
+- named_series_status=
+- named_series_excerpt=
+- named_commit_count=0
+- expected_recovery_series_count=0
+- expected_recovery_commit_count=0
+
+stopped_reason: interactive fail gate stopped after step_1_empty_create because a human or DB assertion failed
+
+human_verdict: FAIL
+final_db_verdict: PASS
+
+conclusion: FAIL

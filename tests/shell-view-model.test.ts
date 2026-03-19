@@ -36,21 +36,16 @@ function buildSnapshot() {
     },
     commandProbe: {
       source: "mock" as const,
-      path: "series.create",
+      path: "series.list",
       envelope: {
         ok: true,
         data: {
-          series: {
-            id: "series-inbox",
-            name: "Inbox",
-            status: "active" as const,
-            lastUpdatedAt: "2026-03-16T00:00:00Z",
-            latestExcerpt: "first-note",
-            createdAt: "2026-03-15T00:00:00Z",
-          },
+          items: [],
+          nextCursor: null,
+          limitEcho: 50,
         },
         meta: {
-          path: "series.create",
+          path: "series.list",
           runtimeMode: "sqlite_only" as const,
           usedFallback: false,
           respondedAtUnixMs: 123,

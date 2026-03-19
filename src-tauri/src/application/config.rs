@@ -9,6 +9,7 @@ use tauri::{AppHandle, Manager, Runtime};
 const CONFIG_FILE_NAME: &str = "config.toml";
 const DEFAULT_HOTKEY: &str = "Alt+Space";
 const DEFAULT_SILENT_DAYS_THRESHOLD: u32 = 7;
+pub(crate) const APP_DATA_DIR_OVERRIDE_ENV: &str = "REMEMBER_APPDATA_DIR";
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum RuntimeMode {
@@ -157,18 +158,41 @@ pub fn load_from_path(path: &Path) -> ConfigLoadReport {
 }
 
 fn resolve_config_path<R: Runtime>(app: &AppHandle<R>) -> (PathBuf, Vec<String>) {
+    let mut warnings = Vec::new();
+
+    if let Some(mut override_dir) = resolve_app_data_dir_override() {
+        match fs::create_dir_all(&override_dir) {
+            Ok(()) => {
+                override_dir.push(CONFIG_FILE_NAME);
+                return (override_dir, warnings);
+            }
+            Err(error) => warnings.push(format!(
+                "failed to create override app data directory from {APP_DATA_DIR_OVERRIDE_ENV}={}, fallback to platform app data directory: {error}",
+                override_dir.display()
+            )),
+        }
+    }
+
     match app.path().app_data_dir() {
         Ok(mut dir) => {
             dir.push(CONFIG_FILE_NAME);
-            (dir, Vec::new())
+            (dir, warnings)
         }
-        Err(error) => (
-            PathBuf::from(CONFIG_FILE_NAME),
-            vec![format!(
+        Err(error) => {
+            warnings.push(format!(
                 "failed to resolve app data directory, fallback path is {CONFIG_FILE_NAME}: {error}"
-            )],
-        ),
+            ));
+            (PathBuf::from(CONFIG_FILE_NAME), warnings)
+        }
     }
+}
+
+fn resolve_app_data_dir_override() -> Option<PathBuf> {
+    std::env::var(APP_DATA_DIR_OVERRIDE_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
 }
 
 fn parse_raw_config(raw: &str) -> Result<(AppConfig, Vec<String>, bool), toml::de::Error> {
@@ -231,7 +255,7 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{load_from_path, RuntimeMode};
+    use super::{load_from_path, resolve_app_data_dir_override, RuntimeMode, APP_DATA_DIR_OVERRIDE_ENV};
 
     #[test]
     fn parses_all_supported_runtime_modes() {
@@ -294,6 +318,17 @@ mod tests {
         assert!(report.used_fallback);
         assert!(!report.warnings.is_empty());
         assert!(report.warnings[0].contains("config file not found"));
+    }
+
+    #[test]
+    fn reads_app_data_override_from_environment() {
+        let override_dir = std::env::temp_dir().join("remember-config-override");
+        std::env::set_var(APP_DATA_DIR_OVERRIDE_ENV, &override_dir);
+
+        let resolved = resolve_app_data_dir_override();
+
+        std::env::remove_var(APP_DATA_DIR_OVERRIDE_ENV);
+        assert_eq!(resolved, Some(override_dir));
     }
 
     fn create_temp_config_path(suffix: &str) -> PathBuf {

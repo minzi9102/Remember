@@ -1,0 +1,41 @@
+case_id: P5-T1-VG-PASS
+target_mode: desktop_window
+review_mode: codex_multimodal
+env_id: ENV-PG
+runtime_mode: postgres_only
+run_date: 20260319
+tester: codex
+structure: environment -> steps_or_checklist -> observer_result -> db_proof -> conclusion
+
+environment:
+- vite_url: http://127.0.0.1:1420
+- desktop_title: tauri-app [postgres_only]
+
+visual_artifacts:
+- list_screenshot: D:\BME2026\TECHNICAL\Remember\qa-gates-codex\P5-T1-VG-PASS_20260319_ENV-PG_codex-list.png
+- timeline_screenshot: D:\BME2026\TECHNICAL\Remember\qa-gates-codex\P5-T1-VG-PASS_20260319_ENV-PG_codex-timeline.png
+
+codex_checklist:
+- key panels visible
+- seeded ordering and badges stable
+- timeline screenshot targets the correct series
+- archived-view checks marked N/A if not shown
+- no visible overlap, clipping, or fake-success state
+codex_verdict: PASS
+codex_note: full-rerun-visual
+
+db_assertion_result: PASS
+db_proof:
+- backend=postgres
+- series_order=Anchor Series:active:anchor-note | Project-A:silent:follow-up-note
+- anchor_status=active
+- project_a_status=silent
+- project_a_archived_at=
+- named_series_count=0
+- named_series_id=
+- named_series_status=
+- named_series_excerpt=
+- named_commit_count=0
+- expected_project_a_status=silent
+
+conclusion: PASS

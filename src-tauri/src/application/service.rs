@@ -10,6 +10,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use tauri::{AppHandle, Manager, Runtime};
 use uuid::Uuid;
 
+use super::config::APP_DATA_DIR_OVERRIDE_ENV;
 use super::dto::{
     CommitAppendData, CommitItem, SeriesArchiveData, SeriesCreateData, SeriesListData,
     SeriesScanSilentData, SeriesStatus, SeriesSummary, TimelineListData,
@@ -428,6 +429,19 @@ async fn connect_postgres_pool(postgres_dsn: &str) -> Result<PgPool, Application
 fn resolve_sqlite_database_path<R: Runtime>(app: &AppHandle<R>) -> (PathBuf, Vec<String>) {
     let mut warnings = Vec::new();
 
+    if let Some(mut override_dir) = resolve_app_data_dir_override() {
+        match fs::create_dir_all(&override_dir) {
+            Ok(()) => {
+                override_dir.push(SQLITE_DB_FILE_NAME);
+                return (override_dir, warnings);
+            }
+            Err(error) => warnings.push(format!(
+                "failed to create override app data directory from {APP_DATA_DIR_OVERRIDE_ENV}={}, fallback to platform app data directory: {error}",
+                override_dir.display()
+            )),
+        }
+    }
+
     match app.path().app_data_dir() {
         Ok(mut app_data_dir) => {
             if let Err(error) = fs::create_dir_all(&app_data_dir) {
@@ -448,6 +462,14 @@ fn resolve_sqlite_database_path<R: Runtime>(app: &AppHandle<R>) -> (PathBuf, Vec
     }
 
     (PathBuf::from(SQLITE_DB_FILE_NAME), warnings)
+}
+
+fn resolve_app_data_dir_override() -> Option<PathBuf> {
+    std::env::var(APP_DATA_DIR_OVERRIDE_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
 }
 
 fn map_series_record(record: SeriesRecord) -> SeriesSummary {
@@ -537,7 +559,11 @@ mod tests {
 
     use sqlx::sqlite::SqlitePoolOptions;
 
-    use super::{bootstrap_postgres_service, ApplicationError, ApplicationService};
+    use super::{
+        bootstrap_postgres_service, resolve_app_data_dir_override, ApplicationError,
+        ApplicationService,
+    };
+    use crate::application::config::APP_DATA_DIR_OVERRIDE_ENV;
     use crate::repository::{
         self, CreateSeriesInput, ListSeriesQuery, MarkSilentSeriesInput, MemoRepository,
     };
@@ -703,6 +729,17 @@ mod tests {
             }
             other => panic!("expected internal postgres bootstrap error, got {other}"),
         }
+    }
+
+    #[test]
+    fn reads_app_data_override_from_environment() {
+        let override_dir = std::env::temp_dir().join("remember-service-override");
+        std::env::set_var(APP_DATA_DIR_OVERRIDE_ENV, &override_dir);
+
+        let resolved = resolve_app_data_dir_override();
+
+        std::env::remove_var(APP_DATA_DIR_OVERRIDE_ENV);
+        assert_eq!(resolved, Some(override_dir));
     }
 
     async fn build_test_service() -> ApplicationService {

@@ -1,0 +1,41 @@
+case_id: P5-T1-IG-PASS
+target_mode: desktop_window
+review_mode: human_step_input
+env_id: ENV-PG
+runtime_mode: postgres_only
+run_date: 20260319
+tester: codex
+structure: environment -> steps_or_checklist -> observer_result -> db_proof -> conclusion
+
+environment:
+- vite_url: http://127.0.0.1:1420
+- desktop_title: tauri-app [postgres_only]
+- created_series: P5T1-ENV-PG-PASS-f6e03d9b
+- created_commit: p5t1-pass-note-f6e03d9b
+- archive_target: p5t1-project-a
+
+step_id: step_1_create_series
+instruction: Press Shift+N, enter 'P5T1-ENV-PG-PASS-f6e03d9b', and press Enter. Confirm the commit draft opens for the new series.
+human_result: FAIL
+human_note: manual desktop interaction not executed in unattended rerun
+screenshot: D:\BME2026\TECHNICAL\Remember\qa-gates-codex\P5-T1-IG-PASS_20260319_ENV-PG_codex-step1-create.png
+db_assertion_result: FAIL
+db_proof:
+- assertion_error=ASSERT: created series should appear exactly once on postgres
+- backend=postgres
+- series_order=Anchor Series:active:anchor-note | Project-A:silent:follow-up-note
+- anchor_status=active
+- project_a_status=silent
+- project_a_archived_at=
+- named_series_count=0
+- named_series_id=
+- named_series_status=
+- named_series_excerpt=
+- named_commit_count=0
+
+stopped_reason: interactive gate stopped after step_1_create_series because a human or DB assertion failed
+
+human_verdict: FAIL
+final_db_verdict: FAIL
+
+conclusion: FAIL

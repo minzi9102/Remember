@@ -21,21 +21,16 @@ function buildShell(overrides?: Partial<ShellState>): ShellState {
     },
     commandProbe: {
       source: "mock",
-      path: "series.create",
+      path: "series.list",
       envelope: {
         ok: true,
         data: {
-          series: {
-            id: "series-inbox",
-            name: "Inbox",
-            status: "active",
-            lastUpdatedAt: "2026-03-16T00:00:00Z",
-            latestExcerpt: "first-note",
-            createdAt: "2026-03-15T00:00:00Z",
-          },
+          items: [],
+          nextCursor: null,
+          limitEcho: 50,
         },
         meta: {
-          path: "series.create",
+          path: "series.list",
           runtimeMode: "dual_sync",
           usedFallback: false,
           respondedAtUnixMs: 123,
@@ -123,7 +118,7 @@ describe("RememberShell list and timeline views", () => {
     const shell = buildShell({
       commandProbe: {
         source: "mock",
-        path: "series.create",
+        path: "series.list",
         envelope: {
           ok: false,
           error: {
@@ -131,7 +126,7 @@ describe("RememberShell list and timeline views", () => {
             message: "simulated",
           },
           meta: {
-            path: "series.create",
+            path: "series.list",
             runtimeMode: "dual_sync",
             usedFallback: false,
             respondedAtUnixMs: 456,

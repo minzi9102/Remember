@@ -87,11 +87,11 @@ describe("runtime-adapter command envelope probe", () => {
   it("returns success envelope in mock mode by default", () => {
     const probe = readMockCommandProbe(withMockSession("?runtime_mode=dual_sync"));
 
-    expect(probe.path).toBe("series.create");
+    expect(probe.path).toBe("series.list");
     expect(probe.source).toBe("mock");
     expect(probe.envelope.ok).toBe(true);
     expect(probe.envelope.meta.runtimeMode).toBe("dual_sync");
-    expect(probe.envelope.meta.path).toBe("series.create");
+    expect(probe.envelope.meta.path).toBe("series.list");
     expect(probe.envelope.meta.startupSelfHeal).toMatchObject({
       scannedAlerts: 0,
       repairedAlerts: 0,
@@ -100,14 +100,21 @@ describe("runtime-adapter command envelope probe", () => {
       messages: [],
     });
     expect(probe.envelope.data).toMatchObject({
-      series: {
-        name: "Inbox",
-        status: "active",
-      },
+      items: [
+        {
+          id: "series-inbox",
+          name: "Inbox",
+          status: "active",
+        },
+        {
+          id: "series-project-a",
+          name: "Project-A",
+          status: "silent",
+        },
+      ],
+      nextCursor: null,
+      limitEcho: 50,
     });
-    expect((probe.envelope.data as { series: { id: string } }).series.id).toMatch(
-      /^stub-series-inbox/,
-    );
   });
 
   it("returns DTO fields for series.list", () => {

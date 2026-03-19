@@ -41,9 +41,6 @@ foreach ($caseId in $Cases) {
 
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $outputDir = Join-Path $root "qa-gates-codex"
-$appDataDir = Join-Path $env:APPDATA "com.remember.app"
-$configPath = Join-Path $appDataDir "config.toml"
-$sqlitePath = Join-Path $appDataDir "remember.sqlite3"
 $pythonExe = Join-Path $root ".venv\Scripts\python.exe"
 $screenshotScript = Join-Path $env:USERPROFILE ".codex\skills\screenshot\scripts\take_screenshot.ps1"
 $exePath = Join-Path $root "src-tauri\target\debug\tauri-app.exe"
@@ -59,7 +56,6 @@ $tester = "codex"
 $vitePort = 1420
 $viteUrl = "http://127.0.0.1:${vitePort}"
 $runtimeLogDir = Join-Path $env:TEMP ("p5t1-logs-" + [guid]::NewGuid().ToString())
-$backupDir = Join-Path $env:TEMP ("p5t1-backup-" + [guid]::NewGuid().ToString())
 $modeMatrix = @(
   [pscustomobject]@{ EnvId = "ENV-SQLITE"; RuntimeMode = "sqlite_only" },
   [pscustomobject]@{ EnvId = "ENV-PG"; RuntimeMode = "postgres_only" },
@@ -69,6 +65,14 @@ $caseResults = [ordered]@{}
 $baselineResults = [System.Collections.Generic.List[object]]::new()
 
 $global:ViteProcess = $null
+$script:CurrentStorageRoot = $null
+$script:CurrentRoamingAppDataBase = $null
+$script:CurrentLocalAppDataBase = $null
+$script:CurrentAppDataDir = $null
+$script:CurrentConfigPath = $null
+$script:CurrentSqlitePath = $null
+$script:CurrentAppStdoutPath = $null
+$script:CurrentAppStderrPath = $null
 
 function New-Dir {
   param([string]$Path)
@@ -129,38 +133,189 @@ function Wait-HttpReady {
   throw "timed out waiting for $Url"
 }
 
-function Backup-AppDataState {
-  New-Dir -Path $backupDir
-
-  if (Test-Path $configPath) {
-    Copy-Item $configPath (Join-Path $backupDir "config.toml.bak") -Force
-  }
-  if (Test-Path $sqlitePath) {
-    Copy-Item $sqlitePath (Join-Path $backupDir "remember.sqlite3.bak") -Force
+function Assert-StorageContext {
+  if ([string]::IsNullOrWhiteSpace($script:CurrentAppDataDir) -or
+      [string]::IsNullOrWhiteSpace($script:CurrentConfigPath) -or
+      [string]::IsNullOrWhiteSpace($script:CurrentSqlitePath) -or
+      [string]::IsNullOrWhiteSpace($script:CurrentRoamingAppDataBase) -or
+      [string]::IsNullOrWhiteSpace($script:CurrentLocalAppDataBase)) {
+    throw "isolated app-data context is not initialized"
   }
 }
 
-function Restore-AppDataState {
-  Stop-RememberProcesses
+function Initialize-IsolatedAppDataContext {
+  param(
+    [string]$EnvId,
+    [string]$CaseId
+  )
 
-  $configBackup = Join-Path $backupDir "config.toml.bak"
-  $sqliteBackup = Join-Path $backupDir "remember.sqlite3.bak"
+  $caseToken = [guid]::NewGuid().ToString("N").Substring(0, 8)
+  $storageRoot = Join-Path $env:TEMP ("p5t1-appdata-{0}-{1}-{2}" -f $EnvId, $CaseId, $caseToken)
+  $roamingBase = Join-Path $storageRoot "Roaming"
+  $localBase = Join-Path $storageRoot "Local"
+  $appDataDir = Join-Path $roamingBase "com.remember.app"
 
-  if (Test-Path $configBackup) {
-    Copy-Item $configBackup $configPath -Force
-  } elseif (Test-Path $configPath) {
-    Remove-Item $configPath -Force
+  New-Dir -Path $appDataDir
+  New-Dir -Path $localBase
+
+  $script:CurrentStorageRoot = $storageRoot
+  $script:CurrentRoamingAppDataBase = $roamingBase
+  $script:CurrentLocalAppDataBase = $localBase
+  $script:CurrentAppDataDir = $appDataDir
+  $script:CurrentConfigPath = Join-Path $appDataDir "config.toml"
+  $script:CurrentSqlitePath = Join-Path $appDataDir "remember.sqlite3"
+  $script:CurrentAppStdoutPath = $null
+  $script:CurrentAppStderrPath = $null
+}
+
+function Clear-IsolatedAppDataContext {
+  $script:CurrentStorageRoot = $null
+  $script:CurrentRoamingAppDataBase = $null
+  $script:CurrentLocalAppDataBase = $null
+  $script:CurrentAppDataDir = $null
+  $script:CurrentConfigPath = $null
+  $script:CurrentSqlitePath = $null
+  $script:CurrentAppStdoutPath = $null
+  $script:CurrentAppStderrPath = $null
+}
+
+function Test-PathUnlocked {
+  param([string]$Path)
+
+  if (-not (Test-Path $Path)) {
+    return $true
   }
 
-  if (Test-Path $sqliteBackup) {
-    Copy-Item $sqliteBackup $sqlitePath -Force
-  } elseif (Test-Path $sqlitePath) {
-    Remove-Item $sqlitePath -Force
+  try {
+    $stream = [System.IO.File]::Open(
+      $Path,
+      [System.IO.FileMode]::Open,
+      [System.IO.FileAccess]::ReadWrite,
+      [System.IO.FileShare]::None
+    )
+    $stream.Close()
+    return $true
+  } catch {
+    return $false
+  }
+}
+
+function Wait-PathUnlocked {
+  param(
+    [string]$Path,
+    [int]$Attempts = 40,
+    [int]$DelayMs = 250
+  )
+
+  for ($index = 0; $index -lt $Attempts; $index++) {
+    if (Test-PathUnlocked -Path $Path) {
+      return
+    }
+
+    Start-Sleep -Milliseconds $DelayMs
+  }
+
+  throw "timed out waiting for file release: $Path"
+}
+
+function Remove-PathWithRetry {
+  param(
+    [string]$Path,
+    [int]$Attempts = 40,
+    [int]$DelayMs = 250
+  )
+
+  if (-not (Test-Path $Path)) {
+    return
+  }
+
+  for ($index = 0; $index -lt $Attempts; $index++) {
+    try {
+      Remove-Item $Path -Force -Recurse -ErrorAction Stop
+      if (-not (Test-Path $Path)) {
+        return
+      }
+    } catch {
+    }
+
+    Start-Sleep -Milliseconds $DelayMs
+  }
+
+  throw "timed out removing path: $Path"
+}
+
+function Get-CurrentSqliteArtifacts {
+  if ([string]::IsNullOrWhiteSpace($script:CurrentSqlitePath)) {
+    return @()
+  }
+
+  return @(
+    $script:CurrentSqlitePath,
+    "$($script:CurrentSqlitePath)-wal",
+    "$($script:CurrentSqlitePath)-shm"
+  )
+}
+
+function Wait-SqliteArtifactsReleased {
+  foreach ($path in (Get-CurrentSqliteArtifacts)) {
+    if (Test-Path $path) {
+      Wait-PathUnlocked -Path $path
+    }
+  }
+}
+
+function Remove-IsolatedAppDataRoot {
+  if (-not [string]::IsNullOrWhiteSpace($script:CurrentStorageRoot) -and (Test-Path $script:CurrentStorageRoot)) {
+    Wait-SqliteArtifactsReleased
+    Remove-PathWithRetry -Path $script:CurrentStorageRoot
+  }
+}
+
+function Wait-ProcessExit {
+  param(
+    [System.Diagnostics.Process]$Process,
+    [int]$Attempts = 40,
+    [int]$DelayMs = 250
+  )
+
+  if ($null -eq $Process) {
+    return
+  }
+
+  for ($index = 0; $index -lt $Attempts; $index++) {
+    try {
+      $Process.Refresh()
+      if ($Process.HasExited) {
+        return
+      }
+    } catch {
+      return
+    }
+
+    Start-Sleep -Milliseconds $DelayMs
   }
 }
 
 function Stop-RememberProcesses {
-  Get-Process -Name "tauri-app" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Get-Process -Name "tauri-app" -ErrorAction SilentlyContinue | ForEach-Object {
+    try {
+      if ($_.MainWindowHandle -ne 0) {
+        $null = $_.CloseMainWindow()
+      }
+    } catch {
+    }
+  }
+
+  Start-Sleep -Milliseconds 500
+
+  Get-Process -Name "tauri-app" -ErrorAction SilentlyContinue | ForEach-Object {
+    try {
+      Stop-Process -Id $_.Id -Force -ErrorAction Stop
+    } catch {
+    }
+  }
+
+  Wait-SqliteArtifactsReleased
 }
 
 function Stop-ViteProcesses {
@@ -258,6 +413,7 @@ function Invoke-TempPsqlText {
 
 function Reset-TempPostgresSchema {
   $sql = @"
+SET client_min_messages TO warning;
 DROP SCHEMA IF EXISTS public CASCADE;
 CREATE SCHEMA public;
 "@
@@ -270,7 +426,8 @@ function Write-AppConfig {
     [string]$PostgresDsn = ""
   )
 
-  New-Dir -Path $appDataDir
+  Assert-StorageContext
+  New-Dir -Path $script:CurrentAppDataDir
 
   $lines = @(
     "runtime_mode = `"$RuntimeMode`"",
@@ -282,12 +439,16 @@ function Write-AppConfig {
     $lines += "postgres_dsn = `"$PostgresDsn`""
   }
 
-  Set-Content -Path $configPath -Value $lines -Encoding UTF8
+  Set-Content -Path $script:CurrentConfigPath -Value $lines -Encoding UTF8
 }
 
 function Reset-SqliteDatabase {
-  if (Test-Path $sqlitePath) {
-    Remove-Item $sqlitePath -Force
+  Assert-StorageContext
+
+  foreach ($path in (Get-CurrentSqliteArtifacts)) {
+    if (Test-Path $path) {
+      Remove-PathWithRetry -Path $path
+    }
   }
 }
 
@@ -340,15 +501,76 @@ function Take-ActiveWindowShot {
 }
 
 function Start-App {
-  return Start-Process -FilePath $exePath -WorkingDirectory (Split-Path $exePath) -PassThru
+  Assert-StorageContext
+  New-Dir -Path $runtimeLogDir
+
+  $logToken = [guid]::NewGuid().ToString("N")
+  $script:CurrentAppStdoutPath = Join-Path $runtimeLogDir ("p5t1-app-{0}.out.log" -f $logToken)
+  $script:CurrentAppStderrPath = Join-Path $runtimeLogDir ("p5t1-app-{0}.err.log" -f $logToken)
+
+  $previousAppData = $env:APPDATA
+  $previousLocalAppData = $env:LOCALAPPDATA
+  $previousRememberAppDataDir = $env:REMEMBER_APPDATA_DIR
+
+  try {
+    $env:APPDATA = $script:CurrentRoamingAppDataBase
+    $env:LOCALAPPDATA = $script:CurrentLocalAppDataBase
+    $env:REMEMBER_APPDATA_DIR = $script:CurrentAppDataDir
+
+    return Start-Process `
+      -FilePath $exePath `
+      -WorkingDirectory (Split-Path $exePath) `
+      -PassThru `
+      -RedirectStandardOutput $script:CurrentAppStdoutPath `
+      -RedirectStandardError $script:CurrentAppStderrPath
+  } finally {
+    if ($null -eq $previousAppData) {
+      Remove-Item Env:APPDATA -ErrorAction SilentlyContinue
+    } else {
+      $env:APPDATA = $previousAppData
+    }
+
+    if ($null -eq $previousLocalAppData) {
+      Remove-Item Env:LOCALAPPDATA -ErrorAction SilentlyContinue
+    } else {
+      $env:LOCALAPPDATA = $previousLocalAppData
+    }
+
+    if ($null -eq $previousRememberAppDataDir) {
+      Remove-Item Env:REMEMBER_APPDATA_DIR -ErrorAction SilentlyContinue
+    } else {
+      $env:REMEMBER_APPDATA_DIR = $previousRememberAppDataDir
+    }
+  }
 }
 
 function Stop-App {
   param([System.Diagnostics.Process]$Process)
 
   if ($null -ne $Process) {
-    Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+    try {
+      $Process.Refresh()
+      if (-not $Process.HasExited -and $Process.MainWindowHandle -ne 0) {
+        $null = $Process.CloseMainWindow()
+        Start-Sleep -Milliseconds 500
+      }
+    } catch {
+    }
+
+    Wait-ProcessExit -Process $Process -Attempts 10 -DelayMs 250
+
+    try {
+      $Process.Refresh()
+      if (-not $Process.HasExited) {
+        Stop-Process -Id $Process.Id -Force -ErrorAction Stop
+      }
+    } catch {
+    }
+
+    Wait-ProcessExit -Process $Process
   }
+
+  Wait-SqliteArtifactsReleased
 }
 
 function Bootstrap-ModeStorage {
@@ -366,6 +588,10 @@ function Bootstrap-ModeStorage {
   } finally {
     Stop-App -Process $app
   }
+
+  if ($RuntimeMode -ne "postgres_only" -and -not (Test-Path $script:CurrentSqlitePath)) {
+    throw "sqlite database was not created in isolated app-data directory: $($script:CurrentSqlitePath)"
+  }
 }
 
 function Invoke-PythonText {
@@ -380,7 +606,8 @@ function Invoke-PythonText {
 }
 
 function Seed-SqliteBaseline {
-  $escapedPath = $sqlitePath.Replace("\", "\\")
+  Assert-StorageContext
+  $escapedPath = $script:CurrentSqlitePath.Replace("\", "\\")
   $code = @"
 import sqlite3
 path = r"$escapedPath"
@@ -400,6 +627,7 @@ VALUES
   ('p5t1-project-a-commit', 'p5t1-project-a', 'follow-up-note', '2026-03-10T08:00:00Z');
 """)
 conn.commit()
+conn.close()
 print("sqlite baseline seeded")
 "@
   $null = Invoke-PythonText -Code $code
@@ -472,7 +700,8 @@ function Get-SqliteState {
     [string]$CommitContent = ""
   )
 
-  $escapedPath = $sqlitePath.Replace("\", "\\")
+  Assert-StorageContext
+  $escapedPath = $script:CurrentSqlitePath.Replace("\", "\\")
   $seriesJson = $SeriesName.Replace("\", "\\").Replace('"', '\"')
   $commitJson = $CommitContent.Replace("\", "\\").Replace('"', '\"')
 
@@ -521,6 +750,7 @@ payload = {
 }
 
 print(json.dumps(payload, ensure_ascii=True))
+conn.close()
 "@
 
   return (Invoke-PythonText -Code $code | ConvertFrom-Json)
@@ -1506,10 +1736,10 @@ function Invoke-IsolatedCase {
     [string]$CaseId
   )
 
-  Prepare-ModeBaseline -RuntimeMode $RuntimeMode
-  $app = Start-App
-
   try {
+    Initialize-IsolatedAppDataContext -EnvId $EnvId -CaseId $CaseId
+    Prepare-ModeBaseline -RuntimeMode $RuntimeMode
+    $app = Start-App
     $window = Wait-AppWindow -ProcessId $app.Id -ExpectedTitle "tauri-app [$RuntimeMode]"
     Start-Sleep -Seconds 2
 
@@ -1522,6 +1752,8 @@ function Invoke-IsolatedCase {
     }
   } finally {
     Stop-App -Process $app
+    Remove-IsolatedAppDataRoot
+    Clear-IsolatedAppDataContext
   }
 }
 
@@ -1621,7 +1853,6 @@ try {
   Assert-Preconditions
   New-Dir -Path $outputDir
   New-Dir -Path $runtimeLogDir
-  Backup-AppDataState
   Start-ViteServer
   Start-TempPostgres
 
@@ -1638,7 +1869,8 @@ try {
   Write-Summary
 }
 finally {
-  Restore-AppDataState
+  Remove-IsolatedAppDataRoot
+  Clear-IsolatedAppDataContext
   Stop-ViteServer
   Stop-TempPostgres
   Stop-RememberProcesses
