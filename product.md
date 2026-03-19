@@ -57,12 +57,10 @@
 
     元素展示： 每个节点只包含 Commit 正文文本和精确到秒的时间戳。此界面仅供回顾，不提供“修改”按钮。
 
-💾 4. 双轨数据架构设计
+💾 4. SQLite 持久化架构
 
-为了满足你学习 PostgreSQL 的需求，同时保证应用的基础可用性，系统底层将采用仓储模式 (Repository Pattern) 进行抽象。
+系统底层采用仓储模式 (Repository Pattern) 进行抽象，但当前版本只保留 SQLite 数据库模式。
 
-    双重实现： 在代码的持久层（Data Access Layer），你需要定义一个统一的接口（例如 MemoRepository），然后分别实现 SQLiteRepository 和 PostgresRepository。
+    单一实现： 在代码的持久层（Data Access Layer），定义统一接口（例如 MemoRepository），并以 SQLiteRepository 作为唯一运行实现。
 
-    配置驱动： 在配置文件或环境变量中提供一个开关（如 DB_ENGINE=sqlite|postgres 或 ENABLE_POSTGRES=true）。
-
-    学习期双写（推荐）： 在项目初期，你可以尝试实现“双写”逻辑——每次按下 Enter 提交 Commit 时，系统同时向本地的 SQLite 文件和远端的 PostgreSQL 写入数据。这样即便你配置 PostgreSQL 时出错，本地数据也绝对安全。后期学成后，可以通过配置彻底关闭或剥离 PostgreSQL。
+    配置兼容： 旧配置中的 `runtime_mode` 或 `postgres_dsn` 可以继续存在，但只会被忽略并输出 warning，不再改变系统行为。

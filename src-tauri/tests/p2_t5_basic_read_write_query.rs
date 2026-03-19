@@ -1,9 +1,9 @@
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use sqlx::{postgres::PgPoolOptions, sqlite::SqlitePoolOptions};
+use sqlx::sqlite::SqlitePoolOptions;
 use tauri_app_lib::repository;
-use tauri_app_lib::repository::migrations::{run_postgres_migrations, run_sqlite_migrations};
+use tauri_app_lib::repository::migrations::run_sqlite_migrations;
 use tauri_app_lib::repository::{
     AppendCommitInput, ArchiveSeriesInput, CreateSeriesInput, ListSeriesQuery,
     MarkSilentSeriesInput, MemoRepository, RepositoryError, SearchSeriesQuery, TimelineQuery,
@@ -26,29 +26,19 @@ async fn p2_t5_sqlite_basic_read_write_query() {
 }
 
 #[tokio::test]
-async fn p2_t5_postgres_basic_read_write_query() {
-    let dsn = std::env::var("REMEMBER_TEST_POSTGRES_DSN")
-        .expect("REMEMBER_TEST_POSTGRES_DSN is required for p2_t5_postgres_basic_read_write_query");
-
-    let pool = PgPoolOptions::new()
+async fn p2_t5_sqlite_exercises_read_write_query_flow() {
+    let pool = SqlitePoolOptions::new()
         .max_connections(1)
-        .connect(&dsn)
+        .connect("sqlite::memory:")
         .await
-        .expect("failed to connect postgres for p2-t5");
-    run_postgres_migrations(&pool)
+        .expect("failed to connect sqlite memory db for p2-t5 flow");
+    run_sqlite_migrations(&pool)
         .await
-        .expect("failed to run postgres migrations for p2-t5");
-
-    cleanup_postgres_like(&pool, "p2t5-pg-%").await;
-
-    let prefix = format!("p2t5-pg-{}", nonce());
-    cleanup_postgres_prefix(&pool, &prefix).await;
+        .expect("failed to run sqlite migrations for p2-t5 flow");
 
     let repo: Arc<dyn MemoRepository + Send + Sync> =
-        Arc::new(repository::PostgresRepository::new(pool.clone()));
-    run_p2_t5_suite(repo, prefix.clone()).await;
-
-    cleanup_postgres_prefix(&pool, &prefix).await;
+        Arc::new(repository::SqliteRepository::new(pool));
+    run_p2_t5_suite(repo, format!("p2t5-flow-{}", nonce())).await;
 }
 
 async fn run_p2_t5_suite(repo: Arc<dyn MemoRepository + Send + Sync>, prefix: String) {
@@ -294,22 +284,6 @@ async fn run_p2_t5_suite(repo: Arc<dyn MemoRepository + Send + Sync>, prefix: St
         invalid_search_error,
         RepositoryError::Validation(_)
     ));
-}
-
-async fn cleanup_postgres_prefix(pool: &sqlx::PgPool, prefix: &str) {
-    let like_pattern = format!("{prefix}%");
-    cleanup_postgres_like(pool, &like_pattern).await;
-}
-
-async fn cleanup_postgres_like(pool: &sqlx::PgPool, like_pattern: &str) {
-    let _ = sqlx::query("DELETE FROM commits WHERE series_id LIKE $1 OR id LIKE $1")
-        .bind(like_pattern)
-        .execute(pool)
-        .await;
-    let _ = sqlx::query("DELETE FROM series WHERE id LIKE $1")
-        .bind(like_pattern)
-        .execute(pool)
-        .await;
 }
 
 fn nonce() -> u128 {

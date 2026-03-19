@@ -5,7 +5,7 @@ use serde_json::{to_value, Value};
 use tauri::State;
 
 use crate::application::{
-    config::RuntimeConfigState,
+    config::{RuntimeConfigState, SQLITE_RUNTIME_MODE},
     service::{ApplicationError, ApplicationService, ApplicationServiceState},
 };
 use crate::repository::StartupSelfHealSummary;
@@ -16,8 +16,6 @@ const NOT_FOUND_CODE: &str = "NOT_FOUND";
 const CONFLICT_CODE: &str = "CONFLICT";
 const NOT_IMPLEMENTED_CODE: &str = "NOT_IMPLEMENTED";
 const INTERNAL_ERROR_CODE: &str = "INTERNAL_ERROR";
-const PG_TIMEOUT_CODE: &str = "PG_TIMEOUT";
-const DUAL_WRITE_FAILED_CODE: &str = "DUAL_WRITE_FAILED";
 const FORCE_ERROR_CODE_FIELD: &str = "__forceErrorCode";
 
 #[derive(Debug, Clone, Serialize)]
@@ -56,8 +54,6 @@ enum RpcErrorKind {
     Conflict,
     NotImplemented,
     Internal,
-    PgTimeout,
-    DualWriteFailed,
 }
 
 #[tauri::command]
@@ -84,7 +80,7 @@ pub(crate) async fn handle_rpc(
     tracing::debug!(
         component = "rpc",
         path,
-        runtime_mode = %config_state.config.runtime_mode,
+        runtime_mode = SQLITE_RUNTIME_MODE,
         used_fallback = config_state.used_fallback,
         "rpc invoke received"
     );
@@ -161,8 +157,6 @@ impl RpcErrorKind {
             Self::Conflict => CONFLICT_CODE,
             Self::NotImplemented => NOT_IMPLEMENTED_CODE,
             Self::Internal => INTERNAL_ERROR_CODE,
-            Self::PgTimeout => PG_TIMEOUT_CODE,
-            Self::DualWriteFailed => DUAL_WRITE_FAILED_CODE,
         }
     }
 }
@@ -201,14 +195,6 @@ impl RpcError {
     fn internal(message: impl Into<String>) -> Self {
         Self::from_kind(RpcErrorKind::Internal, message)
     }
-
-    fn pg_timeout(message: impl Into<String>) -> Self {
-        Self::from_kind(RpcErrorKind::PgTimeout, message)
-    }
-
-    fn dual_write_failed(message: impl Into<String>) -> Self {
-        Self::from_kind(RpcErrorKind::DualWriteFailed, message)
-    }
 }
 
 fn build_meta(
@@ -218,11 +204,7 @@ fn build_meta(
 ) -> RpcMeta {
     RpcMeta {
         path: path.to_string(),
-        runtime_mode: config_state
-            .config
-            .runtime_mode
-            .as_config_value()
-            .to_string(),
+        runtime_mode: SQLITE_RUNTIME_MODE.to_string(),
         used_fallback: config_state.used_fallback,
         responded_at_unix_ms: current_unix_ms(),
         startup_self_heal: service_state.startup_self_heal().clone(),
@@ -248,14 +230,10 @@ fn resolve_forced_error(payload: &Value) -> Result<Option<RpcError>, RpcError> {
 
     let normalized = raw_code.to_ascii_uppercase();
     let forced_error = match normalized.as_str() {
-        PG_TIMEOUT_CODE => RpcError::pg_timeout("simulated postgres timeout for diagnostics"),
-        DUAL_WRITE_FAILED_CODE => {
-            RpcError::dual_write_failed("simulated dual write failure for diagnostics")
-        }
         VALIDATION_ERROR_CODE => RpcError::validation("simulated validation error for diagnostics"),
         _ => {
             return Err(RpcError::validation(format!(
-                "field `{FORCE_ERROR_CODE_FIELD}` must be one of {PG_TIMEOUT_CODE}, {DUAL_WRITE_FAILED_CODE}, {VALIDATION_ERROR_CODE}"
+                "field `{FORCE_ERROR_CODE_FIELD}` must be one of {VALIDATION_ERROR_CODE}"
             )))
         }
     };
@@ -350,8 +328,6 @@ fn map_application_error(error: ApplicationError) -> RpcError {
         ApplicationError::NotFound(message) => RpcError::not_found(message),
         ApplicationError::Conflict(message) => RpcError::conflict(message),
         ApplicationError::NotImplemented(message) => RpcError::not_implemented(message),
-        ApplicationError::PgTimeout(message) => RpcError::pg_timeout(message),
-        ApplicationError::DualWriteFailed(message) => RpcError::dual_write_failed(message),
         ApplicationError::Internal(message) => RpcError::internal(message),
     }
 }
@@ -440,13 +416,10 @@ mod tests {
 
     use serde_json::Value;
 
-    use super::{
-        handle_rpc, DUAL_WRITE_FAILED_CODE, NOT_FOUND_CODE, PG_TIMEOUT_CODE, UNKNOWN_COMMAND_CODE,
-        VALIDATION_ERROR_CODE,
-    };
+    use super::{handle_rpc, NOT_FOUND_CODE, UNKNOWN_COMMAND_CODE, VALIDATION_ERROR_CODE};
     use crate::application::{
-        config::{AppConfig, RuntimeConfigState, RuntimeMode},
-        service::{build_test_service_state, ApplicationError},
+        config::{AppConfig, RuntimeConfigState},
+        service::build_test_service_state,
     };
 
     #[tokio::test]
@@ -718,93 +691,9 @@ mod tests {
         assert_eq!(error.code, UNKNOWN_COMMAND_CODE);
     }
 
-    #[tokio::test]
-    async fn returns_pg_timeout_error_when_forced() {
-        let state = test_state();
-        let service_state = build_test_service_state().await;
-        let envelope = handle_rpc(
-            "series.create",
-            serde_json::json!({ "name": "Inbox", "__forceErrorCode": "PG_TIMEOUT" }),
-            &state,
-            &service_state,
-        )
-        .await;
-
-        assert!(!envelope.ok);
-        let error = envelope.error.expect("error should exist");
-        assert_eq!(error.code, PG_TIMEOUT_CODE);
-    }
-
-    #[tokio::test]
-    async fn returns_dual_write_failed_error_when_forced() {
-        let state = test_state();
-        let service_state = build_test_service_state().await;
-        let envelope = handle_rpc(
-            "series.create",
-            serde_json::json!({ "name": "Inbox", "__forceErrorCode": "DUAL_WRITE_FAILED" }),
-            &state,
-            &service_state,
-        )
-        .await;
-
-        assert!(!envelope.ok);
-        let error = envelope.error.expect("error should exist");
-        assert_eq!(error.code, DUAL_WRITE_FAILED_CODE);
-    }
-
-    #[tokio::test]
-    async fn dual_sync_runtime_mode_executes_commands_with_dual_meta() {
-        let state = dual_sync_test_state();
-        let service_state = build_test_service_state().await;
-        let envelope = handle_rpc(
-            "series.create",
-            serde_json::json!({ "name": "Inbox" }),
-            &state,
-            &service_state,
-        )
-        .await;
-
-        assert!(envelope.ok, "dual_sync mode should execute command");
-        assert_eq!(envelope.meta.runtime_mode, "dual_sync");
-        assert_eq!(envelope.meta.startup_self_heal.repaired_alerts, 0);
-        assert!(envelope.error.is_none());
-    }
-
-    #[test]
-    fn maps_application_pg_timeout_to_rpc_pg_timeout() {
-        let rpc_error = super::map_application_error(ApplicationError::PgTimeout(
-            "simulated timeout".to_string(),
-        ));
-        assert_eq!(rpc_error.code, PG_TIMEOUT_CODE);
-    }
-
-    #[test]
-    fn maps_application_dual_write_failed_to_rpc_dual_write_failed() {
-        let rpc_error = super::map_application_error(ApplicationError::DualWriteFailed(
-            "simulated dual write failure".to_string(),
-        ));
-        assert_eq!(rpc_error.code, DUAL_WRITE_FAILED_CODE);
-    }
-
     fn test_state() -> RuntimeConfigState {
         RuntimeConfigState {
             config: AppConfig {
-                runtime_mode: RuntimeMode::SqliteOnly,
-                postgres_dsn: None,
-                silent_days_threshold: 7,
-                hotkey: "Alt+Space".to_string(),
-            },
-            config_path: PathBuf::from("config.toml"),
-            warnings: Vec::new(),
-            used_fallback: false,
-        }
-    }
-
-    fn dual_sync_test_state() -> RuntimeConfigState {
-        RuntimeConfigState {
-            config: AppConfig {
-                runtime_mode: RuntimeMode::DualSync,
-                postgres_dsn: Some("postgres://configured".to_string()),
                 silent_days_threshold: 7,
                 hotkey: "Alt+Space".to_string(),
             },

@@ -1,7 +1,7 @@
 # EXECUTION RULES
 
 ## 1. 黑盒原则
-1. 允许使用：应用 UI、配置文件、日志输出、SQLite Browser、`psql`。
+1. 允许使用：应用 UI、配置文件、日志输出、SQLite Browser。
 2. 禁止依赖：源码阅读、内部函数名、未公开调试接口。
 3. 若步骤依赖“交付方提供的启动命令/测试账号/测试数据”，按测试包文档执行。
 
@@ -9,8 +9,6 @@
 | 环境ID | OS | 运行模式 | 数据源 |
 |---|---|---|---|
 | ENV-SQLITE | Windows/macOS | `sqlite_only` | 本地 SQLite |
-| ENV-PG | Windows/macOS | `postgres_only` | PostgreSQL |
-| ENV-DUAL | Windows/macOS | `dual_sync` | SQLite + PostgreSQL |
 
 ## 3. 门禁执行流程
 1. 按阶段顺序执行：Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5。

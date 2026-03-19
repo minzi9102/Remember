@@ -315,13 +315,13 @@ describe("shell view model", () => {
       buildSeriesList(),
       null,
       {
-        code: "DUAL_WRITE_FAILED",
+        code: "INTERNAL_ERROR",
         message: "failed to refresh silent series status",
       },
     );
 
     expect(state.interactionFeedback).toEqual({
-      code: "DUAL_WRITE_FAILED",
+      code: "INTERNAL_ERROR",
       message: "failed to refresh silent series status",
     });
   });

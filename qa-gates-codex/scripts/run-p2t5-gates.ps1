@@ -98,7 +98,7 @@ function Run-IGFail {
   Add-Content $txt "`nconclusion: PASS"
 }
 
-foreach ($pair in @(@('ENV-SQLITE','sqlite_only'), @('ENV-PG','postgres_only'))) {
+foreach ($pair in @(@('ENV-SQLITE','sqlite_only'))) {
   $envId = $pair[0]
   $mode = $pair[1]
   Run-VGPass -EnvId $envId -Mode $mode

@@ -1,4 +1,3 @@
-use std::fmt;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -10,44 +9,10 @@ const CONFIG_FILE_NAME: &str = "config.toml";
 const DEFAULT_HOTKEY: &str = "Alt+Space";
 const DEFAULT_SILENT_DAYS_THRESHOLD: u32 = 7;
 pub(crate) const APP_DATA_DIR_OVERRIDE_ENV: &str = "REMEMBER_APPDATA_DIR";
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum RuntimeMode {
-    #[default]
-    SqliteOnly,
-    PostgresOnly,
-    DualSync,
-}
-
-impl RuntimeMode {
-    pub fn from_config_value(value: &str) -> Option<Self> {
-        match value {
-            "sqlite_only" => Some(Self::SqliteOnly),
-            "postgres_only" => Some(Self::PostgresOnly),
-            "dual_sync" => Some(Self::DualSync),
-            _ => None,
-        }
-    }
-
-    pub fn as_config_value(&self) -> &'static str {
-        match self {
-            Self::SqliteOnly => "sqlite_only",
-            Self::PostgresOnly => "postgres_only",
-            Self::DualSync => "dual_sync",
-        }
-    }
-}
-
-impl fmt::Display for RuntimeMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_config_value())
-    }
-}
+pub const SQLITE_RUNTIME_MODE: &str = "sqlite_only";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
-    pub runtime_mode: RuntimeMode,
-    pub postgres_dsn: Option<String>,
     pub silent_days_threshold: u32,
     pub hotkey: String,
 }
@@ -55,8 +20,6 @@ pub struct AppConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            runtime_mode: RuntimeMode::SqliteOnly,
-            postgres_dsn: None,
             silent_days_threshold: DEFAULT_SILENT_DAYS_THRESHOLD,
             hotkey: DEFAULT_HOTKEY.to_string(),
         }
@@ -200,23 +163,14 @@ fn parse_raw_config(raw: &str) -> Result<(AppConfig, Vec<String>, bool), toml::d
     let mut warnings = Vec::new();
     let mut used_fallback = false;
 
-    let runtime_mode = match parsed.runtime_mode.as_deref() {
-        Some(mode) => match RuntimeMode::from_config_value(mode) {
-            Some(runtime_mode) => runtime_mode,
-            None => {
-                warnings.push(format!(
-                    "invalid runtime_mode `{mode}`, fallback to sqlite_only"
-                ));
-                used_fallback = true;
-                RuntimeMode::default()
-            }
-        },
-        None => {
-            warnings.push("missing runtime_mode, fallback to sqlite_only".to_string());
-            used_fallback = true;
-            RuntimeMode::default()
+    if let Some(raw_mode) = parsed.runtime_mode.as_deref() {
+        let trimmed = raw_mode.trim();
+        if !trimmed.is_empty() {
+            warnings.push(format!(
+                "legacy runtime_mode `{trimmed}` is ignored; {SQLITE_RUNTIME_MODE} is always active"
+            ));
         }
-    };
+    }
 
     let hotkey = match parsed.hotkey {
         Some(hotkey) if !hotkey.trim().is_empty() => hotkey,
@@ -224,23 +178,22 @@ fn parse_raw_config(raw: &str) -> Result<(AppConfig, Vec<String>, bool), toml::d
             warnings.push(format!(
                 "empty hotkey, fallback to default `{DEFAULT_HOTKEY}`"
             ));
+            used_fallback = true;
             DEFAULT_HOTKEY.to_string()
         }
         None => DEFAULT_HOTKEY.to_string(),
     };
 
-    let postgres_dsn = parsed.postgres_dsn.and_then(|dsn| {
+    if let Some(dsn) = parsed.postgres_dsn.as_deref() {
         let trimmed = dsn.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
+        if !trimmed.is_empty() {
+            warnings.push(format!(
+                "legacy postgres_dsn is ignored; {SQLITE_RUNTIME_MODE} is always active"
+            ));
         }
-    });
+    }
 
     let config = AppConfig {
-        runtime_mode,
-        postgres_dsn,
         silent_days_threshold: parsed
             .silent_days_threshold
             .unwrap_or(DEFAULT_SILENT_DAYS_THRESHOLD),
@@ -255,17 +208,13 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{load_from_path, resolve_app_data_dir_override, RuntimeMode, APP_DATA_DIR_OVERRIDE_ENV};
+    use super::{load_from_path, resolve_app_data_dir_override, APP_DATA_DIR_OVERRIDE_ENV};
 
     #[test]
-    fn parses_all_supported_runtime_modes() {
-        let test_cases = [
-            ("sqlite_only", RuntimeMode::SqliteOnly),
-            ("postgres_only", RuntimeMode::PostgresOnly),
-            ("dual_sync", RuntimeMode::DualSync),
-        ];
+    fn legacy_runtime_modes_are_accepted_but_ignored() {
+        let test_cases = ["sqlite_only", "postgres_only", "dual_sync"];
 
-        for (raw_mode, expected_mode) in test_cases {
+        for raw_mode in test_cases {
             let file_path = create_temp_config_path(raw_mode);
             std::fs::create_dir_all(
                 file_path
@@ -277,16 +226,45 @@ mod tests {
                 .expect("failed to write temp config");
 
             let report = load_from_path(&file_path);
-            assert_eq!(report.config.runtime_mode, expected_mode);
+            assert_eq!(report.config.silent_days_threshold, 7);
+            assert_eq!(report.config.hotkey, "Alt+Space");
             assert!(!report.used_fallback);
-            assert!(report.warnings.is_empty());
+            assert_eq!(report.warnings.len(), 1);
+            assert!(report.warnings[0].contains("legacy runtime_mode"));
 
             cleanup_temp_path(&file_path);
         }
     }
 
     #[test]
-    fn falls_back_when_runtime_mode_is_invalid() {
+    fn warns_when_legacy_postgres_dsn_is_present() {
+        let file_path = create_temp_config_path("legacy-postgres-dsn");
+        std::fs::create_dir_all(
+            file_path
+                .parent()
+                .expect("temp config path should have a parent"),
+        )
+        .expect("failed to create temp directory");
+        std::fs::write(
+            &file_path,
+            "runtime_mode = \"dual_sync\"\npostgres_dsn = \"postgres://user:pass@localhost:5432/remember\"\n",
+        )
+        .expect("failed to write temp config");
+
+        let report = load_from_path(&file_path);
+
+        assert_eq!(report.config.silent_days_threshold, 7);
+        assert_eq!(report.config.hotkey, "Alt+Space");
+        assert!(!report.used_fallback);
+        assert_eq!(report.warnings.len(), 2);
+        assert!(report.warnings[0].contains("legacy runtime_mode"));
+        assert!(report.warnings[1].contains("legacy postgres_dsn"));
+
+        cleanup_temp_path(&file_path);
+    }
+
+    #[test]
+    fn ignores_invalid_legacy_runtime_mode_values() {
         let file_path = create_temp_config_path("invalid-runtime-mode");
         std::fs::create_dir_all(
             file_path
@@ -301,10 +279,10 @@ mod tests {
         .expect("failed to write temp config");
 
         let report = load_from_path(&file_path);
-        assert_eq!(report.config.runtime_mode, RuntimeMode::SqliteOnly);
-        assert!(report.used_fallback);
-        assert!(!report.warnings.is_empty());
-        assert!(report.warnings[0].contains("invalid runtime_mode"));
+        assert_eq!(report.config.hotkey, "Ctrl+Shift+R");
+        assert!(!report.used_fallback);
+        assert_eq!(report.warnings.len(), 1);
+        assert!(report.warnings[0].contains("legacy runtime_mode"));
 
         cleanup_temp_path(&file_path);
     }
@@ -314,10 +292,32 @@ mod tests {
         let file_path = create_temp_config_path("missing");
         let report = load_from_path(&file_path);
 
-        assert_eq!(report.config.runtime_mode, RuntimeMode::SqliteOnly);
+        assert_eq!(report.config.silent_days_threshold, 7);
+        assert_eq!(report.config.hotkey, "Alt+Space");
         assert!(report.used_fallback);
         assert!(!report.warnings.is_empty());
         assert!(report.warnings[0].contains("config file not found"));
+    }
+
+    #[test]
+    fn falls_back_when_hotkey_is_empty() {
+        let file_path = create_temp_config_path("empty-hotkey");
+        std::fs::create_dir_all(
+            file_path
+                .parent()
+                .expect("temp config path should have a parent"),
+        )
+        .expect("failed to create temp directory");
+        std::fs::write(&file_path, "hotkey = \"   \"").expect("failed to write temp config");
+
+        let report = load_from_path(&file_path);
+
+        assert_eq!(report.config.hotkey, "Alt+Space");
+        assert!(report.used_fallback);
+        assert_eq!(report.warnings.len(), 1);
+        assert!(report.warnings[0].contains("empty hotkey"));
+
+        cleanup_temp_path(&file_path);
     }
 
     #[test]

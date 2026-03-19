@@ -2,7 +2,7 @@
 
 ### Summary
 1. 构建一个桌面端“极速记录”应用，核心是不可变 Commit 时间线、键盘优先交互、单 Series 单时间线模型。  
-2. 交付两级视图（Series 列表 + Timeline）、沉寂与归档机制、可切换的 SQLite/PostgreSQL 持久化架构。  
+2. 交付两级视图（Series 列表 + Timeline）、沉寂与归档机制，以及 SQLite-only 持久化架构。  
 3. 成功标准采用你选择的“仅功能验收”口径。  
 
 ### 描述要实现的功能和目标
@@ -11,7 +11,7 @@
 3. 系列按最后更新时间倒序展示，最新发生记录的 Series 自动置顶。  
 4. 系统自动识别“7 天无更新”的沉寂 Series，并支持一键归档。  
 5. 用户可进入第二级时间线只读回顾，不提供修改历史入口。  
-6. 系统通过 `MemoRepository` 抽象数据访问，并支持 `sqlite|postgres` 配置切换与学习期双写。  
+6. 系统通过 `MemoRepository` 抽象数据访问，并固定使用 SQLite 持久化。  
 
 ### 用户故事
 1. 作为记录者，我希望按热键后直接输入并回车保存，避免打断思路。  
@@ -27,13 +27,12 @@
 4. 超过 7 天无新 Commit 的 Series 必须标记为 `silent` 并下沉；高亮时按 `a` 必须归档并移出主列表。  
 5. 二级 Timeline 必须按时间倒序展示，每条仅含 `content` 与 `created_at`，且全程只读。  
 6. 数据层必须定义 `MemoRepository` 统一接口，至少覆盖：创建 Series、查询列表、搜索 Series、写入 Commit、读取 Timeline、归档 Series。  
-7. 必须提供 `SQLiteRepository` 与 `PostgresRepository` 两个实现；通过 `DB_ENGINE=sqlite|postgres` 选择。  
-8. 双写模式开启时，提交 Commit 同时写 SQLite 与 PostgreSQL；提交成功以 SQLite 写入成功为准。  
+7. 必须提供 `SQLiteRepository` 实现，并通过统一仓储接口承载全部读写。  
 
 ### 关键实体（数据模型）
 1. `Series(id, name, status[active|silent|archived], last_updated_at, created_at, archived_at?)`。  
 2. `Commit(id, series_id, content, created_at[秒级])`。  
-3. `AppConfig(db_engine[sqlite|postgres], enable_dual_write, hotkey, silent_days_threshold=7)`。  
+3. `AppConfig(hotkey, silent_days_threshold=7)`；旧 `runtime_mode` / `postgres_dsn` 仅作兼容 warning。  
 
 ### Test Plan（验收场景）
 1. 热键呼出后输入文本并 `Enter`，应创建新 Commit 且无编辑入口。  
@@ -42,13 +41,13 @@
 4. `/` 搜索仅过滤 Series 名称，`Esc` 后恢复完整列表。  
 5. 超过 7 天未更新的 Series 自动变为沉寂并下沉显示。  
 6. 对沉寂 Series 按 `a` 后，Series 从主列表移除且保留归档数据。  
-7. 切换 `DB_ENGINE` 后读写正常；开启双写时两库均收到写请求。  
+7. SQLite-only 模式下读写稳定；旧配置字段存在时系统仍能正常启动。  
 
 ### 成功标准（仅功能验收）
 1. 关键路径“唤醒→输入→提交→置顶刷新”可稳定执行。  
 2. 已提交 Commit 在系统内不可修改、不可覆盖。  
 3. 两级视图、搜索、沉寂、归档行为全部符合定义。  
-4. `sqlite` 与 `postgres` 模式均可独立运行，双写可按配置启停。  
+4. `sqlite_only` 模式稳定运行，旧多后端配置不会阻断启动。  
 5. Test Plan 场景通过率达到 100%。  
 
 ### 假设与默认

@@ -11,7 +11,7 @@
 ## 测试数据
 | 数据项 | 值 |
 |---|---|
-| 运行模式 | `sqlite_only` / `postgres_only` / `dual_sync` |
+| 运行模式 | `sqlite_only` |
 | 样例 Series | `Inbox`, `Project-A`, `Archive-Me` |
 | 样例 Commit | `first-note`, `follow-up-note` |
 
@@ -71,3 +71,4 @@
 
 ## 回归标签
 `phase-{n}` `t{m}` `blackbox` `gate`
+

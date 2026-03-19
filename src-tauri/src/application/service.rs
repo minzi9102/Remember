@@ -1,11 +1,9 @@
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
-use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use tauri::{AppHandle, Manager, Runtime};
 use uuid::Uuid;
@@ -18,8 +16,7 @@ use super::dto::{
 use crate::repository::{
     self, AppendCommitInput, ArchiveSeriesInput, CommitRecord, CreateSeriesInput,
     DynMemoRepository, ListSeriesQuery, MarkSilentSeriesInput, RepositoryError, SearchSeriesQuery,
-    SeriesRecord, StartupSelfHealSummary, TimelineQuery, POSTGRES_APPLICATION_NAME,
-    POSTGRES_LOCK_TIMEOUT, POSTGRES_STATEMENT_TIMEOUT,
+    SeriesRecord, StartupSelfHealSummary, TimelineQuery,
 };
 
 const SQLITE_DB_FILE_NAME: &str = "remember.sqlite3";
@@ -49,8 +46,6 @@ pub enum ApplicationError {
     NotFound(String),
     Conflict(String),
     NotImplemented(String),
-    PgTimeout(String),
-    DualWriteFailed(String),
     Internal(String),
 }
 
@@ -71,8 +66,6 @@ impl fmt::Display for ApplicationError {
             Self::NotFound(message) => write!(f, "not found: {message}"),
             Self::Conflict(message) => write!(f, "conflict: {message}"),
             Self::NotImplemented(message) => write!(f, "not implemented: {message}"),
-            Self::PgTimeout(message) => write!(f, "postgres timeout: {message}"),
-            Self::DualWriteFailed(message) => write!(f, "dual write failed: {message}"),
             Self::Internal(message) => write!(f, "internal error: {message}"),
         }
     }
@@ -87,8 +80,6 @@ impl From<RepositoryError> for ApplicationError {
             RepositoryError::NotFound(message) => Self::NotFound(message),
             RepositoryError::Conflict(message) => Self::Conflict(message),
             RepositoryError::NotImplemented(message) => Self::NotImplemented(message),
-            RepositoryError::PgTimeout(message) => Self::PgTimeout(message),
-            RepositoryError::DualWriteFailed(message) => Self::DualWriteFailed(message),
             RepositoryError::Storage(message) => Self::Internal(message),
         }
     }
@@ -322,70 +313,6 @@ pub async fn bootstrap_sqlite_service<R: Runtime>(
     })
 }
 
-pub async fn bootstrap_postgres_service(
-    postgres_dsn: &str,
-    silent_days_threshold: u32,
-) -> Result<ServiceBootstrapReport, ApplicationError> {
-    let pool = connect_postgres_pool(postgres_dsn).await?;
-    repository::migrations::run_postgres_migrations(&pool)
-        .await
-        .map_err(|error| {
-            ApplicationError::internal(format!(
-                "failed to run postgres migrations with configured postgres_dsn: {error}"
-            ))
-        })?;
-
-    let repository: DynMemoRepository = Arc::new(repository::PostgresRepository::new(pool));
-    let service = ApplicationService::new(repository, silent_days_threshold);
-
-    Ok(ServiceBootstrapReport {
-        service_state: ApplicationServiceState::new(service, StartupSelfHealSummary::clean()),
-        backend_target: "postgres_only(configured_dsn)".to_string(),
-        warnings: Vec::new(),
-    })
-}
-
-pub async fn bootstrap_dual_sync_service<R: Runtime>(
-    app: &AppHandle<R>,
-    postgres_dsn: &str,
-    silent_days_threshold: u32,
-) -> Result<ServiceBootstrapReport, ApplicationError> {
-    let (database_path, warnings) = resolve_sqlite_database_path(app);
-
-    let sqlite_pool = connect_sqlite_pool(&database_path).await?;
-    repository::migrations::run_sqlite_migrations(&sqlite_pool)
-        .await
-        .map_err(|error| {
-            ApplicationError::internal(format!(
-                "failed to run sqlite migrations on {}: {error}",
-                database_path.display()
-            ))
-        })?;
-
-    let postgres_pool = connect_postgres_pool(postgres_dsn).await?;
-    repository::migrations::run_postgres_migrations(&postgres_pool)
-        .await
-        .map_err(|error| {
-            ApplicationError::internal(format!(
-                "failed to run postgres migrations with configured postgres_dsn: {error}"
-            ))
-        })?;
-
-    let dual_sync_repository = repository::DualSyncRepository::new(sqlite_pool, postgres_pool);
-    let startup_self_heal = dual_sync_repository.run_startup_self_heal().await;
-    let repository: DynMemoRepository = Arc::new(dual_sync_repository);
-    let service = ApplicationService::new(repository, silent_days_threshold);
-
-    Ok(ServiceBootstrapReport {
-        service_state: ApplicationServiceState::new(service, startup_self_heal),
-        backend_target: format!(
-            "dual_sync(sqlite={}, postgres=configured_dsn)",
-            database_path.display()
-        ),
-        warnings,
-    })
-}
-
 async fn connect_sqlite_pool(database_path: &PathBuf) -> Result<SqlitePool, ApplicationError> {
     let options = SqliteConnectOptions::new()
         .filename(database_path)
@@ -398,30 +325,6 @@ async fn connect_sqlite_pool(database_path: &PathBuf) -> Result<SqlitePool, Appl
             ApplicationError::internal(format!(
                 "failed to connect sqlite database {}: {error}",
                 database_path.display()
-            ))
-        })
-}
-
-async fn connect_postgres_pool(postgres_dsn: &str) -> Result<PgPool, ApplicationError> {
-    let dsn = validate_non_empty(postgres_dsn, "postgres_dsn")?;
-    let options = PgConnectOptions::from_str(&dsn)
-        .map_err(|error| {
-            ApplicationError::internal(format!(
-                "failed to parse configured postgres_dsn into connect options: {error}"
-            ))
-        })?
-        .application_name(POSTGRES_APPLICATION_NAME)
-        .options([
-            ("statement_timeout", POSTGRES_STATEMENT_TIMEOUT),
-            ("lock_timeout", POSTGRES_LOCK_TIMEOUT),
-        ]);
-    PgPoolOptions::new()
-        .max_connections(1)
-        .connect_with(options)
-        .await
-        .map_err(|error| {
-            ApplicationError::internal(format!(
-                "failed to connect postgres database with configured postgres_dsn: {error}"
             ))
         })
 }
@@ -559,10 +462,7 @@ mod tests {
 
     use sqlx::sqlite::SqlitePoolOptions;
 
-    use super::{
-        bootstrap_postgres_service, resolve_app_data_dir_override, ApplicationError,
-        ApplicationService,
-    };
+    use super::{resolve_app_data_dir_override, ApplicationError, ApplicationService};
     use crate::application::config::APP_DATA_DIR_OVERRIDE_ENV;
     use crate::repository::{
         self, CreateSeriesInput, ListSeriesQuery, MarkSilentSeriesInput, MemoRepository,
@@ -714,21 +614,6 @@ mod tests {
             .find(|item| item.id == "series-old")
             .expect("old series should exist");
         assert_eq!(old.status.as_db_value(), "silent");
-    }
-
-    #[tokio::test]
-    async fn postgres_bootstrap_fails_for_invalid_dsn() {
-        let error = match bootstrap_postgres_service("not-a-valid-postgres-dsn", 7).await {
-            Ok(_) => panic!("invalid postgres dsn should fail bootstrap"),
-            Err(error) => error,
-        };
-
-        match error {
-            ApplicationError::Internal(message) => {
-                assert!(message.contains("failed to connect postgres database"));
-            }
-            other => panic!("expected internal postgres bootstrap error, got {other}"),
-        }
     }
 
     #[test]

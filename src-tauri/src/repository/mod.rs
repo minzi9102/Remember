@@ -1,43 +1,55 @@
 #![allow(dead_code)]
 
-mod dual_sync;
 pub mod migrations;
-mod postgres;
 mod sqlite;
 
 use std::fmt;
 use std::sync::Arc;
 
-use crate::application::config::RuntimeMode;
 use async_trait::async_trait;
+use serde::Serialize;
 
-#[allow(unused_imports)]
-pub use dual_sync::{DualSyncRepository, StartupSelfHealSummary};
-#[allow(unused_imports)]
-pub use postgres::PostgresRepository;
 #[allow(unused_imports)]
 pub use sqlite::SqliteRepository;
-
-pub const POSTGRES_APPLICATION_NAME: &str = "remember";
-pub const POSTGRES_STATEMENT_TIMEOUT: &str = "3s";
-pub const POSTGRES_LOCK_TIMEOUT: &str = "2800ms";
 
 const DEFAULT_PAGE_LIMIT: u64 = 50;
 const MAX_PAGE_LIMIT: u64 = 200;
 const TEST_FAILURE_INJECTION_ENV: &str = "REMEMBER_TEST_REPOSITORY_INJECT_FAILURE";
 
-#[derive(Debug, Clone)]
-pub struct RepositoryLayer {
-    runtime_mode: RuntimeMode,
-}
+#[derive(Debug, Clone, Default)]
+pub struct RepositoryLayer;
 
 impl RepositoryLayer {
-    pub fn new(runtime_mode: RuntimeMode) -> Self {
-        Self { runtime_mode }
+    pub fn new() -> Self {
+        Self
     }
 
-    pub fn runtime_mode(&self) -> &RuntimeMode {
-        &self.runtime_mode
+    pub fn runtime_mode(&self) -> &'static str {
+        "sqlite_only"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupSelfHealSummary {
+    pub scanned_alerts: u64,
+    pub repaired_alerts: u64,
+    pub unresolved_alerts: u64,
+    pub failed_alerts: u64,
+    pub completed_at: String,
+    pub messages: Vec<String>,
+}
+
+impl StartupSelfHealSummary {
+    pub fn clean() -> Self {
+        Self {
+            scanned_alerts: 0,
+            repaired_alerts: 0,
+            unresolved_alerts: 0,
+            failed_alerts: 0,
+            completed_at: "1970-01-01T00:00:00Z".to_string(),
+            messages: Vec::new(),
+        }
     }
 }
 
@@ -235,8 +247,6 @@ pub enum RepositoryError {
     NotFound(String),
     Conflict(String),
     NotImplemented(String),
-    PgTimeout(String),
-    DualWriteFailed(String),
     Storage(String),
 }
 
@@ -257,14 +267,6 @@ impl RepositoryError {
         Self::NotImplemented(message.into())
     }
 
-    pub fn pg_timeout(message: impl Into<String>) -> Self {
-        Self::PgTimeout(message.into())
-    }
-
-    pub fn dual_write_failed(message: impl Into<String>) -> Self {
-        Self::DualWriteFailed(message.into())
-    }
-
     pub fn storage(message: impl Into<String>) -> Self {
         Self::Storage(message.into())
     }
@@ -277,8 +279,6 @@ impl fmt::Display for RepositoryError {
             Self::NotFound(message) => write!(f, "not found: {message}"),
             Self::Conflict(message) => write!(f, "conflict: {message}"),
             Self::NotImplemented(message) => write!(f, "not implemented: {message}"),
-            Self::PgTimeout(message) => write!(f, "postgres timeout: {message}"),
-            Self::DualWriteFailed(message) => write!(f, "dual write failed: {message}"),
             Self::Storage(message) => write!(f, "storage error: {message}"),
         }
     }
@@ -391,18 +391,6 @@ fn map_database_error(error: Box<dyn sqlx::error::DatabaseError>) -> RepositoryE
     let message = error.message().to_string();
     let code = error.code().map(|value| value.to_string());
 
-    if matches!(code.as_deref(), Some("57014"))
-        || matches!(code.as_deref(), Some("55P03"))
-        || message
-            .to_ascii_lowercase()
-            .contains("canceling statement due to statement timeout")
-        || message
-            .to_ascii_lowercase()
-            .contains("canceling statement due to lock timeout")
-    {
-        return RepositoryError::pg_timeout(message);
-    }
-
     if matches!(code.as_deref(), Some("23505")) || message.contains("UNIQUE constraint failed") {
         return RepositoryError::conflict(message);
     }
@@ -420,14 +408,14 @@ mod tests {
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use sqlx::{postgres::PgPoolOptions, sqlite::SqlitePoolOptions};
+    use sqlx::sqlite::SqlitePoolOptions;
 
-    use super::migrations::{run_postgres_migrations, run_sqlite_migrations};
+    use super::migrations::run_sqlite_migrations;
     use super::{
         AppendCommitInput, ArchiveSeriesInput, CreateSeriesInput, MarkSilentSeriesInput,
         MemoRepository, RepositoryError, SearchSeriesQuery, SqliteRepository, TimelineQuery,
     };
-    use crate::repository::{ListSeriesQuery, PostgresRepository, SeriesStatus};
+    use crate::repository::{ListSeriesQuery, SeriesStatus};
 
     #[tokio::test]
     async fn sqlite_repository_contract_suite() {
@@ -442,34 +430,6 @@ mod tests {
 
         let repo: Arc<dyn MemoRepository + Send + Sync> = Arc::new(SqliteRepository::new(pool));
         run_repository_contract_suite(repo, format!("sqlite-{}", nonce())).await;
-    }
-
-    #[tokio::test]
-    async fn postgres_repository_contract_suite_is_optional() {
-        let postgres_dsn = match std::env::var("REMEMBER_TEST_POSTGRES_DSN") {
-            Ok(value) if !value.trim().is_empty() => value,
-            _ => {
-                eprintln!(
-                    "skip postgres repository contract test: REMEMBER_TEST_POSTGRES_DSN is not configured"
-                );
-                return;
-            }
-        };
-
-        let pool = PgPoolOptions::new()
-            .max_connections(1)
-            .connect(&postgres_dsn)
-            .await
-            .expect("failed to connect postgres with REMEMBER_TEST_POSTGRES_DSN");
-        run_postgres_migrations(&pool)
-            .await
-            .expect("failed to run postgres migrations");
-
-        let prefix = format!("pg-{}", nonce());
-        let repo: Arc<dyn MemoRepository + Send + Sync> =
-            Arc::new(PostgresRepository::new(pool.clone()));
-        run_repository_contract_suite(repo, prefix.clone()).await;
-        cleanup_postgres_prefix(&pool, &prefix).await;
     }
 
     async fn run_repository_contract_suite(
@@ -714,18 +674,6 @@ mod tests {
             invalid_search_error,
             RepositoryError::Validation(_)
         ));
-    }
-
-    async fn cleanup_postgres_prefix(pool: &sqlx::PgPool, prefix: &str) {
-        let like_pattern = format!("{prefix}%");
-        let _ = sqlx::query("DELETE FROM commits WHERE series_id LIKE $1 OR id LIKE $1")
-            .bind(&like_pattern)
-            .execute(pool)
-            .await;
-        let _ = sqlx::query("DELETE FROM series WHERE id LIKE $1")
-            .bind(&like_pattern)
-            .execute(pool)
-            .await;
     }
 
     fn nonce() -> u128 {

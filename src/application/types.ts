@@ -1,5 +1,5 @@
 export type LayerState = "ready" | "stubbed";
-export type RuntimeMode = "sqlite_only" | "postgres_only" | "dual_sync";
+export type RuntimeMode = "sqlite_only";
 export type RuntimeSource = "native" | "mock";
 export type SeriesStatus = "active" | "silent" | "archived";
 export type SeriesCollection = "active" | "archived";

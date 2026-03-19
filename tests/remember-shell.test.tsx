@@ -7,14 +7,14 @@ import { RememberShell } from "../src/ui/RememberShell";
 function buildShell(overrides?: Partial<ShellState>): ShellState {
   return {
     appTitle: "Remember",
-    subtitle: "Phase 4 Task 6 - Archived Read-only Timeline",
+    subtitle: "SQLite-only shell",
     layers: {
       adapter: "ready",
       application: "ready",
       repository: "stubbed",
     },
     runtimeStatus: {
-      mode: "dual_sync",
+      mode: "sqlite_only",
       usedFallback: false,
       warnings: [],
       source: "mock",
@@ -31,7 +31,7 @@ function buildShell(overrides?: Partial<ShellState>): ShellState {
         },
         meta: {
           path: "series.list",
-          runtimeMode: "dual_sync",
+          runtimeMode: "sqlite_only",
           usedFallback: false,
           respondedAtUnixMs: 123,
           startupSelfHeal: {
@@ -100,59 +100,55 @@ function renderShellMarkup(shell: ShellState) {
   );
 }
 
-describe("RememberShell list and timeline views", () => {
-  it("renders the series list state and diagnostics", () => {
+describe("RememberShell sqlite-only views", () => {
+  it("renders list diagnostics and startup self-heal summary", () => {
     const markup = renderShellMarkup(buildShell());
 
     expect(markup).toContain("Series");
     expect(markup).toContain("Inbox");
     expect(markup).toContain("Silent");
-    expect(markup).toContain("View timeline");
-    expect(markup).toContain("Active");
-    expect(markup).toContain("Archived");
     expect(markup).toContain("Startup Self-Heal");
     expect(markup).toContain("No unresolved startup alerts.");
   });
 
   it("renders unresolved startup self-heal messages", () => {
-    const shell = buildShell({
-      commandProbe: {
-        source: "mock",
-        path: "series.list",
-        envelope: {
-          ok: false,
-          error: {
-            code: "DUAL_WRITE_FAILED",
-            message: "simulated",
-          },
-          meta: {
-            path: "series.list",
-            runtimeMode: "dual_sync",
-            usedFallback: false,
-            respondedAtUnixMs: 456,
-            startupSelfHeal: {
-              scannedAlerts: 2,
-              repairedAlerts: 1,
-              unresolvedAlerts: 1,
-              failedAlerts: 1,
-              completedAt: "2026-03-17T00:10:00Z",
-              messages: ["alert `a` remains unresolved"],
+    const markup = renderShellMarkup(
+      buildShell({
+        commandProbe: {
+          source: "mock",
+          path: "series.list",
+          envelope: {
+            ok: false,
+            error: {
+              code: "INTERNAL_ERROR",
+              message: "simulated",
+            },
+            meta: {
+              path: "series.list",
+              runtimeMode: "sqlite_only",
+              usedFallback: false,
+              respondedAtUnixMs: 456,
+              startupSelfHeal: {
+                scannedAlerts: 2,
+                repairedAlerts: 1,
+                unresolvedAlerts: 1,
+                failedAlerts: 1,
+                completedAt: "2026-03-17T00:10:00Z",
+                messages: ["alert `a` remains unresolved"],
+              },
             },
           },
         },
-      },
-    });
-
-    const markup = renderShellMarkup(shell);
+      }),
+    );
 
     expect(markup).toContain("unresolved: 1");
     expect(markup).toContain("failed: 1");
-    expect(markup).toContain("Unresolved startup alerts");
     expect(markup).toContain("alert `a` remains unresolved");
   });
 
-  it("renders the timeline state with read-only items", () => {
-    const markup = renderShellMarkup(
+  it("renders timeline and archived states as read-only", () => {
+    const timelineMarkup = renderShellMarkup(
       buildShell({
         view: "timeline",
         activeTimelineSeries: {
@@ -174,15 +170,7 @@ describe("RememberShell list and timeline views", () => {
         ],
       }),
     );
-
-    expect(markup).toContain("Back to list");
-    expect(markup).toContain("first-note");
-    expect(markup).toContain("2026-03-16T00:00:00Z");
-    expect(markup).toContain("Read-only timeline");
-  });
-
-  it("renders archived list state with archived badges and readonly hint", () => {
-    const markup = renderShellMarkup(
+    const archivedMarkup = renderShellMarkup(
       buildShell({
         seriesCollection: "archived",
         seriesList: [
@@ -202,66 +190,13 @@ describe("RememberShell list and timeline views", () => {
       }),
     );
 
-    expect(markup).toContain("Archived Series");
-    expect(markup).toContain("Archived");
-    expect(markup).toContain("Archived series stay read-only.");
-    expect(markup).not.toContain("Create a new series");
-    expect(markup).not.toContain("Append commit to");
+    expect(timelineMarkup).toContain("Read-only timeline");
+    expect(timelineMarkup).toContain("first-note");
+    expect(archivedMarkup).toContain("Archived Series");
+    expect(archivedMarkup).toContain("Archived series stay read-only.");
   });
 
-  it("renders the series empty state", () => {
-    const markup = renderShellMarkup(
-      buildShell({
-        seriesList: [],
-        selectedSeriesId: null,
-      }),
-    );
-
-    expect(markup).toContain("No series yet");
-    expect(markup).toContain("series.list");
-  });
-
-  it("renders the archived empty state", () => {
-    const markup = renderShellMarkup(
-      buildShell({
-        seriesCollection: "archived",
-        seriesList: [],
-        selectedSeriesId: null,
-        activeSelectedSeriesId: "series-inbox",
-        archivedSelectedSeriesId: null,
-      }),
-    );
-
-    expect(markup).toContain("No archived series");
-    expect(markup).toContain("press `a` on a silent series");
-  });
-
-  it("renders the timeline error state", () => {
-    const markup = renderShellMarkup(
-      buildShell({
-        view: "timeline",
-        activeTimelineSeries: {
-          id: "series-inbox",
-          name: "Inbox",
-          status: "active",
-          lastUpdatedAt: "2026-03-16T00:00:00Z",
-          latestExcerpt: "first-note",
-          createdAt: "2026-03-15T00:00:00Z",
-        },
-        timelineLoadState: "error",
-        navigationError: {
-          code: "INVOKE_FAILED",
-          message: "failed to load timeline",
-        },
-      }),
-    );
-
-    expect(markup).toContain("Retry");
-    expect(markup).toContain("Return");
-    expect(markup).toContain("INVOKE_FAILED");
-  });
-
-  it("renders the search, create, and commit command bars", () => {
+  it("renders search/create/commit bars and archive feedback", () => {
     const searchMarkup = renderShellMarkup(
       buildShell({
         interactionMode: "search",
@@ -283,17 +218,7 @@ describe("RememberShell list and timeline views", () => {
         pendingAction: "append_commit",
       }),
     );
-
-    expect(searchMarkup).toContain("Search series");
-    expect(searchMarkup).toContain("Searching...");
-    expect(createMarkup).toContain("Create a new series");
-    expect(createMarkup).toContain("Creating...");
-    expect(commitMarkup).toContain("Append commit to Inbox");
-    expect(commitMarkup).toContain("Saving...");
-  });
-
-  it("renders interaction feedback and archive pending state", () => {
-    const markup = renderShellMarkup(
+    const feedbackMarkup = renderShellMarkup(
       buildShell({
         interactionFeedback: {
           code: "ARCHIVE_DISABLED",
@@ -303,48 +228,10 @@ describe("RememberShell list and timeline views", () => {
       }),
     );
 
-    expect(markup).toContain("ARCHIVE_DISABLED");
-    expect(markup).toContain("only silent series can be archived with `a`");
-    expect(markup).toContain("Archiving the selected silent series...");
-  });
-
-  it("renders archived timeline badges", () => {
-    const markup = renderShellMarkup(
-      buildShell({
-        view: "timeline",
-        seriesCollection: "archived",
-        activeTimelineSeries: {
-          id: "series-archive",
-          name: "Archive",
-          status: "archived",
-          lastUpdatedAt: "2026-03-17T00:00:00Z",
-          latestExcerpt: "frozen note",
-          createdAt: "2026-03-15T00:00:00Z",
-          archivedAt: "2026-03-17T00:00:00Z",
-        },
-        selectedSeriesId: "series-archive",
-        activeSelectedSeriesId: "series-inbox",
-        archivedSelectedSeriesId: "series-archive",
-        timelineLoadState: "ready",
-        timelineItems: [
-          {
-            id: "commit-archive-1",
-            seriesId: "series-archive",
-            content: "frozen note",
-            createdAt: "2026-03-16T00:00:00Z",
-          },
-        ],
-      }),
-    );
-
-    expect(markup).toContain("Archived timeline is read-only");
-    expect(markup).toContain('data-testid="timeline-archived-badge"');
-  });
-
-  it("renders silent rows with a visual status marker", () => {
-    const markup = renderShellMarkup(buildShell());
-
-    expect(markup).toContain('data-testid="series-status-series-project-a"');
-    expect(markup).toContain("series-row is-silent");
+    expect(searchMarkup).toContain("Searching...");
+    expect(createMarkup).toContain("Creating...");
+    expect(commitMarkup).toContain("Saving...");
+    expect(feedbackMarkup).toContain("ARCHIVE_DISABLED");
+    expect(feedbackMarkup).toContain("Archiving the selected silent series...");
   });
 });

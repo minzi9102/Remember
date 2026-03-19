@@ -13,7 +13,7 @@
 ## 测试数据
 | 数据项 | 建议值 |
 |---|---|
-| 运行模式 | sqlite_only / postgres_only / dual_sync |
+| 运行模式 | sqlite_only |
 | 样例 Series | Inbox, Project-A, Archive-Me |
 | 样例 Commit | first-note, follow-up-note, rollback-check |
 | 异常输入 | 空字符串、超长文本(2000字)、非法模式值 |
@@ -92,3 +92,4 @@ phase-1 t3 blackbox visual-gate interaction-gate 命令响应外观一致性
 ### 追踪映射
 - DEV.md 映射：统一响应 {ok,data,error,meta}
 - ROADMAP.md 映射：Phase 1 / 子任务 3
+

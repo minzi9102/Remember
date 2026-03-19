@@ -13,7 +13,7 @@
 ## 测试数据
 | 数据项 | 建议值 |
 |---|---|
-| 运行模式 | sqlite_only / postgres_only / dual_sync |
+| 运行模式 | sqlite_only |
 | 样例 Series | Inbox, Project-A, Archive-Me |
 | 样例 Commit | first-note, follow-up-note, rollback-check |
 | 异常输入 | 空字符串、超长文本(2000字)、非法模式值 |
@@ -92,3 +92,4 @@ phase-4 t4 blackbox visual-gate interaction-gate 置顶与摘录刷新
 ### 追踪映射
 - DEV.md 映射：提交后排序刷新
 - ROADMAP.md 映射：Phase 4 / 子任务 4
+

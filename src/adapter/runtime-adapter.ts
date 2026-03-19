@@ -57,8 +57,6 @@ const VALIDATION_ERROR = "VALIDATION_ERROR";
 const NOT_FOUND = "NOT_FOUND";
 const CONFLICT = "CONFLICT";
 const UNKNOWN_COMMAND = "UNKNOWN_COMMAND";
-const PG_TIMEOUT = "PG_TIMEOUT";
-const DUAL_WRITE_FAILED = "DUAL_WRITE_FAILED";
 const INVOKE_FAILED = "INVOKE_FAILED";
 const FORCE_ERROR_CODE_FIELD = "__forceErrorCode";
 const MAX_EXCERPT_LENGTH = 48;
@@ -73,7 +71,7 @@ export function parseMockRuntimeStatus(search: string): RuntimeStatus {
   const warnings = collectWarningsFromParams(params);
   const normalized = normalizeRuntimeMode(runtimeMode);
 
-  if (normalized.usedFallback && normalized.warning !== null) {
+  if (normalized.warning !== null) {
     warnings.push(normalized.warning);
   }
 
@@ -97,8 +95,10 @@ export function parseNativeRuntimeStatusFromTitle(title: string): RuntimeStatus 
   if (modeMatch?.[1]) {
     const normalized = normalizeRuntimeMode(modeMatch[1]);
     mode = normalized.mode;
-    if (normalized.usedFallback && normalized.warning !== null) {
+    if (normalized.warning !== null) {
       warnings.push(normalized.warning);
+    }
+    if (normalized.usedFallback) {
       usedFallback = true;
     }
   } else {
@@ -420,22 +420,30 @@ function readNonNegativeIntegerParam(
 function normalizeRuntimeMode(
   rawMode: string | null,
 ): { mode: RuntimeMode; usedFallback: boolean; warning: string | null } {
-  if (rawMode === "sqlite_only" || rawMode === "postgres_only" || rawMode === "dual_sync") {
-    return { mode: rawMode, usedFallback: false, warning: null };
+  if (rawMode === "sqlite_only") {
+    return { mode: DEFAULT_MODE, usedFallback: false, warning: null };
   }
 
   if (rawMode === null || rawMode.trim().length === 0) {
     return {
       mode: DEFAULT_MODE,
-      usedFallback: true,
-      warning: "missing runtime_mode, fallback to sqlite_only",
+      usedFallback: false,
+      warning: null,
+    };
+  }
+
+  if (rawMode === "postgres_only" || rawMode === "dual_sync") {
+    return {
+      mode: DEFAULT_MODE,
+      usedFallback: false,
+      warning: `legacy runtime_mode \`${rawMode}\` ignored; sqlite_only is always active`,
     };
   }
 
   return {
     mode: DEFAULT_MODE,
-    usedFallback: true,
-    warning: `invalid runtime_mode \`${rawMode}\`, fallback to sqlite_only`,
+    usedFallback: false,
+    warning: `legacy runtime_mode \`${rawMode}\` ignored; sqlite_only is always active`,
   };
 }
 
@@ -613,10 +621,6 @@ function parseForcedErrorCode(raw: string | null): string | null {
 
   const normalized = raw.trim().toLowerCase();
   switch (normalized) {
-    case "pg_timeout":
-      return PG_TIMEOUT;
-    case "dual_write_failed":
-      return DUAL_WRITE_FAILED;
     case "validation_error":
       return VALIDATION_ERROR;
     default:
@@ -1036,16 +1040,6 @@ function readForcedRpcError(payload: Record<string, unknown>): { code: string; m
 
   const normalized = raw.trim().toUpperCase();
   switch (normalized) {
-    case PG_TIMEOUT:
-      return {
-        code: PG_TIMEOUT,
-        message: "simulated postgres timeout for diagnostics",
-      };
-    case DUAL_WRITE_FAILED:
-      return {
-        code: DUAL_WRITE_FAILED,
-        message: "simulated dual write failure for diagnostics",
-      };
     case VALIDATION_ERROR:
       return {
         code: VALIDATION_ERROR,
@@ -1054,7 +1048,7 @@ function readForcedRpcError(payload: Record<string, unknown>): { code: string; m
     default:
       return {
         code: VALIDATION_ERROR,
-        message: `field \`${FORCE_ERROR_CODE_FIELD}\` must be one of ${PG_TIMEOUT}, ${DUAL_WRITE_FAILED}, ${VALIDATION_ERROR}`,
+        message: `field \`${FORCE_ERROR_CODE_FIELD}\` must be one of ${VALIDATION_ERROR}`,
       };
   }
 }
