@@ -18,8 +18,8 @@
 | P4-T5 | phase-4/p4-t5-silent-detection.md | series.scan_silent（主轨道上下文） | Phase 6 / 子任务 2 | 4 | TODO |
 | P4-T6 | phase-4/p4-t6-archive-readonly.md | Archived 按钮切换 + Timeline 只读 | Phase 6 / 子任务 5 | 4 | TODO |
 | P5-T2 | phase-5/p5-t2-performance-stability.md | 提交延迟/热键响应 | Phase 5 / 子任务 2 | 4 | TODO |
-| P5-T4 | phase-5/p5-t4-release-config-troubleshooting.md | 发布配置/排障文档 | Phase 5 / 子任务 4 | 4 | TODO |
-| P5-T5 | phase-5/p5-t5-release-gate-rollback.md | 发布清单与回滚策略 | Phase 5 / 子任务 5 | 4 | TODO |
+| P5-T31 | phase-5/p5-t31-release-config-troubleshooting.md | 发布配置/排障文档 | Phase 5 / 子任务 3.1 | 4 | TODO |
+| P5-T32 | phase-5/p5-t32-release-gate-rollback.md | 发布清单与回滚策略 | Phase 5 / 子任务 3.2 | 4 | TODO |
 
 ## 覆盖统计
 - 子任务文件数：16

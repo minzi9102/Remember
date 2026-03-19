@@ -6,10 +6,11 @@
 示例：
 - `P3-T2-VG-FAIL_20260315_ENV-DUAL_alice.png`
 - `P4-T3-IG-PASS_20260315_ENV-SQLITE_bob.mp4`
-- `P2-T5-IG-FAIL_20260315_ENV-PG_charlie.txt`
+- `P5-T31-VG-PASS_20260319_ENV-SQLITE_codex.txt`
+- `P5-T32-IG-FAIL_20260319_ENV-SQLITE_codex.mp4`
 
 ## 字段定义
-- `CaseID`：固定格式 `P{n}-T{m}-VG-PASS|VG-FAIL|IG-PASS|IG-FAIL`
+- `CaseID`：固定格式 `P{n}-T{m}-VG-PASS|VG-FAIL|IG-PASS|IG-FAIL`（`m` 可为多位数，例如 `31`、`32`）
 - `YYYYMMDD`：执行日期
 - `env`：`ENV-SQLITE` / `ENV-PG` / `ENV-DUAL`
 - `tester`：执行人英文名或工号

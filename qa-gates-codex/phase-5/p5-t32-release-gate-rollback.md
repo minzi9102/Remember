@@ -1,13 +1,13 @@
-# P5-T4 发布配置与排障 Codex 执行版门禁测试
+# P5-T32 发布门禁与回滚 Codex 执行版门禁测试
 
 ## 目标
-- 验证发布前配置诊断与排障流程可执行。
-- 门禁焦点: 发布配置诊断页
+- 验证发布决策与回滚演练记录完整。
+- 门禁焦点: 发布/回滚门禁记录
 
 ## 可执行测试接口
 | 字段 | 值 |
 |---|---|
-| case_id | `P5-T4-VG-PASS` / `P5-T4-VG-FAIL` / `P5-T4-IG-PASS` / `P5-T4-IG-FAIL` |
+| case_id | `P5-T32-VG-PASS` / `P5-T32-VG-FAIL` / `P5-T32-IG-PASS` / `P5-T32-IG-FAIL` |
 | skill_chain | `playwright`（默认） / `playwright + screenshot`（桌面回退） |
 | target_mode | `web_url`（默认） / `desktop_window`（回退） |
 | setup | 黑盒启动 + 环境校验 |
@@ -26,31 +26,31 @@ $env:PW_BROWSER = 'msedge'
 ```
 
 ## 视觉门禁
-### P5-T4-VG-PASS
-- case_id: `P5-T4-VG-PASS`
+### P5-T32-VG-PASS
+- case_id: `P5-T32-VG-PASS`
 - skill_chain: `playwright`
 - target_mode: `web_url`
 - setup:
   1. 确认应用已启动并可访问 `$env:TARGET_URL`。
-  2. 准备会话 ID：`P5T4-VG-PASS`。
+  2. 准备会话 ID：`P5T32-VG-PASS`。
 - steps:
-  1. `npx --yes --package @playwright/cli playwright-cli -s=P5T4-VG-PASS open $env:TARGET_URL --browser $env:PW_BROWSER`
-  2. `npx --yes --package @playwright/cli playwright-cli -s=P5T4-VG-PASS snapshot`
+  1. `npx --yes --package @playwright/cli playwright-cli -s=P5T32-VG-PASS open $env:TARGET_URL --browser $env:PW_BROWSER`
+  2. `npx --yes --package @playwright/cli playwright-cli -s=P5T32-VG-PASS snapshot`
   3. 根据当前子任务流程完成关键操作并截图（`screenshot`）。
-  4. 记录 `发布配置诊断页` 对应的可见结果。
-  5. `npx --yes --package @playwright/cli playwright-cli -s=P5T4-VG-PASS close`
+  4. 记录 `发布/回滚门禁记录` 对应的可见结果。
+  5. `npx --yes --package @playwright/cli playwright-cli -s=P5T32-VG-PASS close`
 - oracle:
   1. 关键界面元素完整显示，无错位/遮挡。
-  2. `发布配置诊断页` 对应成功态可见。
+  2. `发布/回滚门禁记录` 对应成功态可见。
 - evidence:
-  - `P5-T4-VG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.png`
-  - `P5-T4-VG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
+  - `P5-T32-VG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.png`
+  - `P5-T32-VG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
 - failure rollback:
   1. 关闭会话并保留现有截图。
   2. 标记 `FAIL/BLOCKED`，记录卡点与复现步骤。
 
-### P5-T4-VG-FAIL
-- case_id: `P5-T4-VG-FAIL`
+### P5-T32-VG-FAIL
+- case_id: `P5-T32-VG-FAIL`
 - skill_chain: `playwright + screenshot`
 - target_mode: `web_url` 或 `desktop_window`
 - setup:
@@ -64,19 +64,19 @@ $env:PW_BROWSER = 'msedge'
   1. 存在明确失败反馈，不能静默失败。
   2. 失败后系统仍可继续操作。
 - evidence:
-  - `P5-T4-VG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.png`
-  - `P5-T4-VG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
+  - `P5-T32-VG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.png`
+  - `P5-T32-VG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
 - failure rollback:
   1. 关闭当前会话。
   2. 恢复正常配置后复测一次 PASS 路径。
 
 ## 交互门禁
-### P5-T4-IG-PASS
-- case_id: `P5-T4-IG-PASS`
+### P5-T32-IG-PASS
+- case_id: `P5-T32-IG-PASS`
 - skill_chain: `playwright`
 - target_mode: `web_url`
 - setup:
-  1. 使用会话 ID：`P5T4-IG-PASS`。
+  1. 使用会话 ID：`P5T32-IG-PASS`。
   2. 准备一条合法交互链路（输入、提交、切换或导航）。
 - steps:
   1. `open -> snapshot` 后执行合法交互链路。
@@ -87,14 +87,14 @@ $env:PW_BROWSER = 'msedge'
   1. 交互链路完整，无卡死或不可恢复状态。
   2. 结果可通过 UI + 日志/查询交叉验证。
 - evidence:
-  - `P5-T4-IG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.mp4`
-  - `P5-T4-IG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
+  - `P5-T32-IG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.mp4`
+  - `P5-T32-IG-PASS_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
 - failure rollback:
   1. 保存最后一步前后状态截图。
   2. 标记缺陷并附复现步骤。
 
-### P5-T4-IG-FAIL
-- case_id: `P5-T4-IG-FAIL`
+### P5-T32-IG-FAIL
+- case_id: `P5-T32-IG-FAIL`
 - skill_chain: `playwright`（必要时 `+ screenshot`）
 - target_mode: `web_url` 或 `desktop_window`
 - setup:
@@ -107,13 +107,13 @@ $env:PW_BROWSER = 'msedge'
   1. 非法交互被拒绝并给出明确提示。
   2. 系统不崩溃，合法操作可继续完成。
 - evidence:
-  - `P5-T4-IG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.mp4`
-  - `P5-T4-IG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
+  - `P5-T32-IG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.mp4`
+  - `P5-T32-IG-FAIL_$env:RUN_DATE_$env:ENV_ID_$env:TESTER.txt`
 - failure rollback:
   1. 关闭会话并重启应用。
   2. 若复测仍失败，升级为阻断级。
 
 ## 追踪映射
-- source gate: `qa-gates/phase-5/p5-t4-release-config-troubleshooting.md`
-- DEV.md 映射: 发布配置/排障文档
-- ROADMAP.md 映射: Phase 5 / 子任务 4
+- source gate: `qa-gates/phase-5/p5-t32-release-gate-rollback.md`
+- DEV.md 映射: 发布清单与回滚策略
+- ROADMAP.md 映射: Phase 5 / 子任务 3.2

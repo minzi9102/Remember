@@ -6,7 +6,7 @@
 {"task_name":"P4-T6 完成文档一致性扫描并确认旧架构不再被写成当前能力","completed":true}
 {"task_name":"P5-T1 执行 SQLite-only 全链路回归与兼容 warning 验收","completed":true}
 {"task_name":"P5-T2 完成性能与稳定性基线检查","completed":true}
-{"task_name":"P5-T3 补齐发布配置、排障文档、发布清单与回滚策略","completed":false}
+{"task_name":"P5-T3 补齐发布配置、排障文档、发布清单与回滚策略","completed":true}
 {"task_name":"P6-T1 合并 Cross-Axis vNext 定义文档并冻结目标态口径","completed":true}
 {"task_name":"P6-T2 重构前端布局为横向主轨道与纵向 Timeline 十字架构","completed":false}
 {"task_name":"P6-T3 重映射键盘导航与焦点状态机（←/→/↓/↑/Esc）","completed":false}

@@ -26,8 +26,8 @@
 | P5-T1 | `phase-5/p5-t1-full-regression.md` | 5 | 4 | PASS |
 | P5-T2-LEGACY | `phase-5/legacy/p5-t2-dualwrite-fault-drill.md` | 5 | 4 | BLOCKED |
 | P5-T2 | `phase-5/p5-t2-performance-stability.md` | 5 | 4 | PASS |
-| P5-T4 | `phase-5/p5-t4-release-config-troubleshooting.md` | 5 | 4 | TODO |
-| P5-T5 | `phase-5/p5-t5-release-gate-rollback.md` | 5 | 4 | TODO |
+| P5-T31 | `phase-5/p5-t31-release-config-troubleshooting.md` | 5 | 4 | TODO |
+| P5-T32 | `phase-5/p5-t32-release-gate-rollback.md` | 5 | 4 | TODO |
 
 ## 统计
 - 子任务: 26

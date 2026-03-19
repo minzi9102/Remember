@@ -6,6 +6,14 @@
 - 本文档包含两类内容：`已实现技术事实` 与 `Cross-Axis vNext 前端目标契约`。
 - 截至 2026-03-19，vNext 前端契约尚未全部落地，属于定稿待实现范围。
 
+## 发布与回滚文档入口
+- 发布总手册：`RELEASE.md`
+- 发布配置与排障门禁定义：`qa-gates/phase-5/p5-t31-release-config-troubleshooting.md`
+- 发布清单与回滚门禁定义：`qa-gates/phase-5/p5-t32-release-gate-rollback.md`
+- Codex 执行版门禁定义：
+  - `qa-gates-codex/phase-5/p5-t31-release-config-troubleshooting.md`
+  - `qa-gates-codex/phase-5/p5-t32-release-gate-rollback.md`
+
 ## 当前实现快照
 - 前端：`React 19`、`TypeScript`、`Vite`。
 - 桌面壳：`Tauri 2`、`tauri-plugin-global-shortcut`、`tauri-plugin-opener`。
