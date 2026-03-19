@@ -1,0 +1,63 @@
+task_id: P5-T1
+task_name: sqlite-only full regression and compatibility warning acceptance
+target_mode: automated_sqlite_only
+env_id: ENV-SQLITE
+runtime_mode: sqlite_only
+run_date: 20260319
+tester: codex
+script: qa-gates-codex/scripts/run-p5-t1-sqlite-regression.ps1
+structure: checks -> logs -> warning_acceptance -> conclusion
+
+checks:
+- id: npm_test_unit
+  command: npm.cmd run test:unit
+  result: PASS
+  note: exit code 0
+  stdout_log: C:\Users\99741\AppData\Local\Temp\p5t1-auto-regression-50bc3791ed564c92a20cd720dc68a040\npm-test-unit.out.log
+  stderr_log: C:\Users\99741\AppData\Local\Temp\p5t1-auto-regression-50bc3791ed564c92a20cd720dc68a040\npm-test-unit.err.log
+  expected_patterns: Test Files | passed
+- id: cargo_test_full
+  command: cargo test --manifest-path src-tauri/Cargo.toml
+  result: PASS
+  note: exit code 0
+  stdout_log: C:\Users\99741\AppData\Local\Temp\p5t1-auto-regression-50bc3791ed564c92a20cd720dc68a040\cargo-test-full.out.log
+  stderr_log: C:\Users\99741\AppData\Local\Temp\p5t1-auto-regression-50bc3791ed564c92a20cd720dc68a040\cargo-test-full.err.log
+  expected_patterns: test result: ok.
+- id: rust_warning_assert_runtime_mode_ignored
+  command: cargo test --manifest-path src-tauri/Cargo.toml application::config::tests::legacy_runtime_modes_are_accepted_but_ignored -- --nocapture
+  result: PASS
+  note: exit code 0
+  stdout_log: C:\Users\99741\AppData\Local\Temp\p5t1-auto-regression-50bc3791ed564c92a20cd720dc68a040\rust-warning-assert-runtime-mode-ignored.out.log
+  stderr_log: C:\Users\99741\AppData\Local\Temp\p5t1-auto-regression-50bc3791ed564c92a20cd720dc68a040\rust-warning-assert-runtime-mode-ignored.err.log
+  expected_patterns: legacy_runtime_modes_are_accepted_but_ignored ... ok
+- id: rust_warning_assert_postgres_dsn_ignored
+  command: cargo test --manifest-path src-tauri/Cargo.toml application::config::tests::warns_when_legacy_postgres_dsn_is_present -- --nocapture
+  result: PASS
+  note: exit code 0
+  stdout_log: C:\Users\99741\AppData\Local\Temp\p5t1-auto-regression-50bc3791ed564c92a20cd720dc68a040\rust-warning-assert-postgres-dsn-ignored.out.log
+  stderr_log: C:\Users\99741\AppData\Local\Temp\p5t1-auto-regression-50bc3791ed564c92a20cd720dc68a040\rust-warning-assert-postgres-dsn-ignored.err.log
+  expected_patterns: warns_when_legacy_postgres_dsn_is_present ... ok
+- id: ts_warning_assert_runtime_mode_ignored
+  command: npm.cmd exec -- vitest run tests/runtime-adapter.test.ts --reporter=verbose -t warns when legacy runtime modes are present
+  result: PASS
+  note: exit code 0
+  stdout_log: C:\Users\99741\AppData\Local\Temp\p5t1-auto-regression-50bc3791ed564c92a20cd720dc68a040\ts-warning-assert-runtime-mode-ignored.out.log
+  stderr_log: C:\Users\99741\AppData\Local\Temp\p5t1-auto-regression-50bc3791ed564c92a20cd720dc68a040\ts-warning-assert-runtime-mode-ignored.err.log
+  expected_patterns: warns when legacy runtime modes are present
+- id: ts_warning_assert_postgres_mode_warning_collection
+  command: npm.cmd exec -- vitest run tests/runtime-adapter.test.ts --reporter=verbose -t keeps warning collection from query parameters
+  result: PASS
+  note: exit code 0
+  stdout_log: C:\Users\99741\AppData\Local\Temp\p5t1-auto-regression-50bc3791ed564c92a20cd720dc68a040\ts-warning-assert-postgres-mode-warning-collection.out.log
+  stderr_log: C:\Users\99741\AppData\Local\Temp\p5t1-auto-regression-50bc3791ed564c92a20cd720dc68a040\ts-warning-assert-postgres-mode-warning-collection.err.log
+  expected_patterns: keeps warning collection from query parameters
+
+warning_acceptance:
+- rust_runtime_mode_ignored_assert: PASS
+- rust_postgres_dsn_ignored_assert: PASS
+- ts_runtime_mode_ignored_assert: PASS
+- ts_legacy_warning_collection_assert: PASS
+- warning_acceptance_verdict: PASS
+
+conclusion: PASS
+overall: PASS

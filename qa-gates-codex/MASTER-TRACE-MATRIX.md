@@ -23,7 +23,7 @@
 | P4-T4 | `phase-4/p4-t4-submit-and-reorder.md` | 4 | 4 | PASS |
 | P4-T5 | `phase-4/p4-t5-silent-detection.md` | 4 | 4 | PASS |
 | P4-T6 | `phase-4/p4-t6-archive-readonly.md` | 4 | 4 | PASS |
-| P5-T1 | `phase-5/p5-t1-full-regression.md` | 5 | 4 | FAIL |
+| P5-T1 | `phase-5/p5-t1-full-regression.md` | 5 | 4 | PASS |
 | P5-T2 | `phase-5/p5-t2-dualwrite-fault-drill.md` | 5 | 4 | TODO |
 | P5-T3 | `phase-5/p5-t3-performance-stability.md` | 5 | 4 | TODO |
 | P5-T4 | `phase-5/p5-t4-release-config-troubleshooting.md` | 5 | 4 | TODO |

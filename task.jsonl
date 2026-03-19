@@ -4,6 +4,6 @@
 {"task_name":"P4-T4 重建 ROADMAP.md 为当前分支阶段状态文档","completed":true}
 {"task_name":"P4-T5 迁移并退役 PLAN1.md","completed":true}
 {"task_name":"P4-T6 完成文档一致性扫描并确认旧架构不再被写成当前能力","completed":true}
-{"task_name":"P5-T1 执行 SQLite-only 全链路回归与兼容 warning 验收","completed":false}
+{"task_name":"P5-T1 执行 SQLite-only 全链路回归与兼容 warning 验收","completed":true}
 {"task_name":"P5-T2 完成性能与稳定性基线检查","completed":false}
 {"task_name":"P5-T3 补齐发布配置、排障文档、发布清单与回滚策略","completed":false}
