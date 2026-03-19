@@ -1,83 +1,77 @@
-# Remember v1 分阶段开发计划（`ROADMAP.md`，SQLite-only 版）
+# Remember 当前分支路线图（SQLite-only）
 
 ## Summary
-基于 [DEV.md](./DEV.md) 生成独立的阶段化执行文档 [ROADMAP.md](./ROADMAP.md)，采用 5 个按依赖推进的阶段。每个阶段固定包含：`目标`、`子任务`、`交付物`、`验收门槛`、`风险与依赖`，确保实现时无需再做关键决策。
+- 当前分支已经完成 SQLite-only 主体工程、核心数据闭环和主要交互能力。
+- 本轮文档收束完成后，Phase 1-4 视为已落地；剩余工作集中在 SQLite-only 回归验证、发布文档和发布清单。
+- 路线图只描述“当前分支从现在到可交付版本”的阶段状态，不再回放已废弃的多数据库路线。
 
-## Key Changes
-- `ROADMAP.md` 固定结构：
-  1. 项目目标与边界
-  2. 全局技术约束（不可变历史、SQLite-only、单库一致性）
-  3. 五阶段执行计划（每阶段五要素）
-  4. 里程碑与阶段依赖关系
-  5. 总体验收矩阵（映射 DEV.md Test Plan）
-- 公共接口与类型冻结（写入 ROADMAP 全局约束）：
-  - `Invoke Only + RPC`：`series.create`、`series.list`、`commit.append`、`timeline.list`、`series.archive`、`series.scan_silent`
-  - 响应 envelope：`{ ok, data?, error?, meta }`
-  - Repository 固定方法集：`create_series/list_series/append_commit/list_timeline/archive_series/mark_silent_series/search_series_by_name`
-  - 运行模式：`sqlite_only`
-  - 双库同构表：`series`、`commits`、`consistency_alerts`、`app_settings`
+## 全局约束
+- 运行模式固定为 `sqlite_only`。
+- API 形态固定为 Tauri `invoke` + `RPC 点号命名`。
+- Commit 语义固定为不可变历史，不新增编辑/删除路径。
+- 归档为同库逻辑归档，不引入独立归档数据库。
+- `runtime_mode` 与 `postgres_dsn` 仅保留兼容 warning 语义。
+- `consistency_alerts` 与 `startup_self_heal` 当前仅按遗留诊断结构处理，不按活跃能力规划。
 
-## 五阶段计划（含子任务与目标）
+## 阶段总览
+| Phase | 状态 | 目标 |
+|---|---|---|
+| Phase 1 | 已完成 | 工程骨架与 invoke/RPC 合同 |
+| Phase 2 | 已完成 | SQLite 核心读写闭环与 schema |
+| Phase 3 | 已完成 | 主界面交互、热键、搜索、时间线、沉寂与归档 |
+| Phase 4 | 已完成 | SQLite-only 文档收束与遗留叙事清理 |
+| Phase 5 | 待完成 | SQLite-only 全量回归、发布文档、发布清单 |
 
-### Phase 1: 工程基线与架构骨架
-- 目标：搭建可运行的 Tauri+React+Rust 主干工程与分层骨架，打通 invoke 命令链路。
-- 子任务：
-  1. 初始化项目与目录分层（UI/Adapter/Application/Repository）。
-  2. 建立 `config.toml` 读取与运行模式解析。
-  3. 创建命令壳并返回统一 envelope。
-  4. 接入 `tracing` 与错误码映射。
-  5. 定义共享 DTO（`SeriesSummary`、`CommitItem` 等）。
-- 交付物：可启动应用、可调用空实现命令、统一日志与错误响应。
-- 验收门槛：应用在三模式配置下均可启动，命令路由与响应结构稳定。
-- 风险与依赖：无前置依赖；风险是骨架与后续数据层接口不一致，需在本阶段冻结接口签名。
+## Phase 1: 工程骨架与契约冻结
+- 状态：已完成
+- 目标：建立 Tauri + React + Rust 主干工程，打通前后端调用链路并冻结基础 RPC 契约。
+- 当前成果：已具备 `series.create / series.list / commit.append / timeline.list / series.archive / series.scan_silent` 命令入口、统一 envelope 和基础 DTO。
+- 剩余子任务：无。
+- 验收口径：应用可启动，前端可获得统一运行时状态与 RPC 结果结构。
 
-### Phase 2: SQLite 能力闭环
-- 目标：完成 SQLite-only 模式下的完整业务闭环。
-- 子任务：
-  1. 实现 SQLite migration。
-  2. 定义并实现 Repository Trait 与 SQLite 后端。
-  3. 完成 Application Service（创建系列、提交、列表、时间线、归档、搜索）。
-  4. 固定注入 SQLite 实现，并兼容旧配置字段。
-  5. 完成基础读写与查询测试。
-- 交付物：`sqlite_only` 完成全链路读写。
-- 验收门槛：SQLite 模式下列表排序/搜索/归档正确。
-- 风险与依赖：依赖 Phase 1 接口冻结；风险是 mock 与真实 SQLite 行为漂移，需测试统一语义。
+## Phase 2: SQLite 数据闭环
+- 状态：已完成
+- 目标：完成 SQLite-only 持久化、查询、分页、归档和沉寂扫描能力。
+- 当前成果：SQLite migration、`MemoRepository` trait、`SQLiteRepository` 实现、Application Service 核心流程与仓储契约测试均已落地。
+- 剩余子任务：无。
+- 验收口径：Series 创建、Commit 追加、列表排序、Timeline 查询、归档、沉寂扫描均可通过当前测试基线验证。
 
-### Phase 4: 交互能力与业务规则实现
-- 目标：完成用户可感知的高频交互与规则（热键、键盘流、沉寂、归档、只读时间线）。
-- 子任务：
-  1. 接入全局热键呼出/隐藏。
-  2. 实现一级列表与二级时间线视图切换。
-  3. 实现键盘操作（`↑/↓`、`Enter`、`Esc`、`←/→`、`/`、`Shift+N`、`a`）。
-  4. 提交后列表置顶刷新与摘录更新。
-  5. 实现沉寂判定与下沉显示。
-  6. 实现归档移出主列表、时间线只读。
-- 交付物：完整可交互的 v1 UI 与规则行为。
-- 验收门槛：关键路径“热键呼出 -> 输入 -> Enter -> 列表置顶刷新”稳定；沉寂/归档/搜索行为符合定义。
-- 风险与依赖：依赖 Phase 2 服务稳定；风险是 UI 状态与后端状态不同步，需端到端交互回归。
+## Phase 3: 交互与业务规则
+- 状态：已完成
+- 目标：完成用户主路径的桌面交互闭环与业务规则呈现。
+- 当前成果：全局热键、列表/时间线切换、键盘输入流、搜索、沉寂标记、归档集合、只读 Timeline 均已接通。
+- 剩余子任务：无。
+- 验收口径：关键路径“唤醒 -> 输入 -> 提交 -> 列表刷新”可工作，归档与只读行为符合产品定义。
 
-### Phase 5: 稳定性强化与发布验收
-- 目标：完成 SQLite-only 回归、稳定性检查与发布前验证，形成可交付版本。
-- 子任务：
-  1. 执行全量功能回归（SQLite-only）。
-  3. 完成性能与稳定性基础检查（提交延迟、热键响应）。
-  4. 完成发布配置与故障排查文档。
-  5. 形成发布清单与回滚策略。
-- 交付物：发布候选版本（RC）与验收记录。
-- 验收门槛：`DEV.md` Test Plan 场景通过率 100%，无阻断级缺陷。
-- 风险与依赖：依赖前四阶段完成；风险是环境差异导致回归不稳定，需固定测试环境与基线数据。
+## Phase 4: 文档收束与遗留叙事清理
+- 状态：已完成
+- 目标：把项目文档收敛为 `product.md + DEV.md + ROADMAP.md + task.jsonl` 四件套，并退役重复定义文档。
+- 当前成果：
+  - `product.md` 作为唯一 PRD，只保留产品价值、交互契约、范围边界与验收场景。
+  - `DEV.md` 作为唯一技术真相源，固定 SQLite-only 契约、配置、RPC、schema 与遗留结构说明。
+  - `ROADMAP.md` 重建为当前分支的阶段状态文档。
+  - `task.jsonl` 改写为 Phase 4-5 的原子任务清单。
+  - `PLAN1.md` 已退役，避免与 PRD 重复。
+- 剩余子任务：后续所有代码改动都需继续保持四件套同步。
+- 验收口径：目标文档之间不再出现多数据库作为当前能力的叙事冲突；阶段任务与 backlog 一致。
 
-## Test Plan
-- 阶段验收映射：
-  1. Phase 1：启动与命令骨架可用、响应协议固定。
-  2. Phase 2：SQLite 功能闭环、排序与查询正确。
-  3. Phase 4：键盘优先交互、沉寂判定、归档与只读时间线通过。
-  4. Phase 5：全链路回归、配置兼容与发布检查通过。
-- 关键场景保底：不可变 Commit、SQLite 列表/时间线一致、旧配置兼容告警、归档与沉寂规则正确。
+## Phase 5: 发布前收尾
+- 状态：待完成
+- 目标：在 SQLite-only 前提下完成回归验证、发布文档与交付清单。
+- 当前成果：已有单元测试与 Rust 测试基线，可作为发布前回归的起点。
+- 剩余子任务：
+  1. 执行 SQLite-only 全链路回归，并验证旧配置字段只产生 warning、不改变运行路径。
+  2. 完成性能与稳定性基线检查，关注热键响应、提交延迟和主路径稳定性。
+  3. 补齐发布配置、排障文档、发布清单与回滚策略。
+  4. 决策是否继续保留 `consistency_alerts`、`startup_self_heal`、旧 Postgres migration 目录作为遗留结构，或拆分独立清理任务。
+- 验收口径：发布候选版本具备清晰的回归记录、可追踪的问题清单和明确的发布/回滚步骤。
 
-## Assumptions
-- 目标落盘文件固定为 `ROADMAP.md`，`DEV.md` 保持不变。
-- 阶段粒度固定为 5 阶段，不再拆到 7 阶段。
-- 单用户桌面应用，不引入账号体系与权限模型。
-- 时间统一存 UTC、显示按本地时区，时间精度到秒。
-- 旧 `runtime_mode` 与 `postgres_dsn` 仅保留兼容读取与 warning，不再控制运行路径。
+## 里程碑关系
+- Phase 1 是 Phase 2 的接口前提。
+- Phase 2 是 Phase 3 的数据能力前提。
+- Phase 3 为 Phase 5 的回归验证提供完整用户路径。
+- Phase 4 已完成文档真相收束，为 Phase 5 的发布沟通和验收口径提供统一依据。
+
+## 当前发布焦点
+- 发布阻塞项不再是“选哪种数据库”，而是“把现有 SQLite-only 版本验证到可发布”。
+- 任何涉及清理遗留结构的动作，都应在不破坏当前 SQLite-only 稳定性的前提下单独排期。
