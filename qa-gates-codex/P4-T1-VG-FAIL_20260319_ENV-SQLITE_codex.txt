@@ -9,8 +9,23 @@ webdriver_status_endpoint: failed: ?????????: (500) ???????? | body: {"status":1
 webdriver_root_session_probe: ok
 structure: environment -> steps -> actual_result -> log_excerpt -> sqlite_proof -> conclusion
 
-actual_result:
-- screenshot: D:\BME2026\TECHNICAL\Remember\qa-gates-codex\P4-T1-VG-FAIL_20260319_ENV-SQLITE_codex.png
-- failure: ASSERT: window visibility did not become False for process 26784
+environment:
+- webdriver_url: http://127.0.0.1:4723
+- vite_url: http://127.0.0.1:1420
+- webdriver_health_mode: root-session
+- webdriver_status_endpoint: failed: ?????????: (500) ???????? | body: {"status":13,"value":{"error":"unknown error","message":"An unknown error occurred in the remote end while processing the command."}}
+- webdriver_root_session_probe: ok
+- webdriver_attach_window_probe: ok
 
-conclusion: FAIL
+actual_result:
+- blocked_phase: manual-verification-required
+- blocked_reason: physical keyboard verification required; injected SendInput hotkeys are diagnostic-only and cannot authoritatively verify RegisterHotKey behavior in this environment
+- manual_gate_required: physical keyboard verification required
+- hotkey_injection_diagnostic: D:\BME2026\TECHNICAL\Remember\qa-gates-codex\P4-T1-HOTKEY-DIAG_20260319_ENV-SQLITE_codex.txt
+- hotkey_injection_summary: injected SendInput probes did not trigger RegisterHotKey WM_HOTKEY here, so physical keyboard verification is still required
+- hotkey_probe_Alt+Space: triggered=False
+- hotkey_probe_Ctrl+Shift+R: triggered=False
+- visual_evidence: not produced because Codex injection cannot authoritatively verify real global hotkeys
+- next_step: execute qa-gates/phase-4/p4-t1-global-hotkey.md with a physical keyboard
+
+conclusion: BLOCKED

@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("Alt+Space")]
+  [ValidateSet("Alt+Space", "Ctrl+Shift+R")]
   [string]$Hotkey = "Alt+Space",
   [string]$ReadyFile = "",
   [string]$LogFile = ""
@@ -48,10 +48,22 @@ public static class HotkeyNative {
 
 $hotkeyId = 1
 $wmHotkey = 0x0312
-$modAlt = 0x0001
 $modNoRepeat = 0x4000
-$virtualKeySpace = 0x20
 $isRegistered = $false
+
+switch ($Hotkey) {
+  "Alt+Space" {
+    $modifiers = 0x0001
+    $virtualKey = 0x20
+  }
+  "Ctrl+Shift+R" {
+    $modifiers = 0x0002 -bor 0x0004
+    $virtualKey = [uint32][byte][char]'R'
+  }
+  default {
+    throw "unsupported hotkey: $Hotkey"
+  }
+}
 
 function Write-HelperLog {
   param([string]$Message)
@@ -74,7 +86,7 @@ try {
     }
   }
 
-  if (-not [HotkeyNative]::RegisterHotKey([IntPtr]::Zero, $hotkeyId, ($modAlt -bor $modNoRepeat), $virtualKeySpace)) {
+  if (-not [HotkeyNative]::RegisterHotKey([IntPtr]::Zero, $hotkeyId, ($modifiers -bor $modNoRepeat), $virtualKey)) {
     $errorCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
     throw "failed to register $Hotkey conflict helper (GetLastError=$errorCode)"
   }

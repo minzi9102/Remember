@@ -110,6 +110,7 @@ $ffmpegExe = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
 $screenshotScript = Join-Path $env:USERPROFILE ".codex\skills\screenshot\scripts\take_screenshot.ps1"
 $exePath = Join-Path $root "src-tauri\target\debug\tauri-app.exe"
 $helperScript = Join-Path $PSScriptRoot "hotkey-conflict-helper.ps1"
+$hotkeyDiagnosticScript = Join-Path $PSScriptRoot "diagnose-hotkey-injection-limits.ps1"
 $runDate = Get-Date -Format "yyyyMMdd"
 $tester = "codex"
 $vitePort = 1420
@@ -263,7 +264,9 @@ function Update-MatrixStatus {
 function Write-BlockedArtifacts {
   param(
     [string]$Reason,
-    [string]$Phase = "precheck"
+    [string]$Phase = "precheck",
+    [string]$DiagnosticPath = "",
+    [object]$DiagnosticResult = $null
   )
 
   foreach ($caseId in $selectedCases) {
@@ -281,10 +284,22 @@ function Write-BlockedArtifacts {
     Append-Text -TxtPath $txtPath -Line "actual_result:"
     Append-Text -TxtPath $txtPath -Line "- blocked_phase: $Phase"
     Append-Text -TxtPath $txtPath -Line "- blocked_reason: $Reason"
-    Append-Text -TxtPath $txtPath -Line "- visual_evidence: not produced because precheck blocked before case execution"
+    Append-Text -TxtPath $txtPath -Line "- manual_gate_required: physical keyboard verification required"
+    if (-not [string]::IsNullOrWhiteSpace($DiagnosticPath)) {
+      Append-Text -TxtPath $txtPath -Line "- hotkey_injection_diagnostic: $DiagnosticPath"
+    }
+    if ($null -ne $DiagnosticResult) {
+      Append-Text -TxtPath $txtPath -Line "- hotkey_injection_summary: $($DiagnosticResult.summary)"
+      foreach ($probe in $DiagnosticResult.probes) {
+        Append-Text -TxtPath $txtPath -Line "- hotkey_probe_$($probe.hotkey): triggered=$($probe.triggered)"
+      }
+    }
+    Append-Text -TxtPath $txtPath -Line "- visual_evidence: not produced because Codex injection cannot authoritatively verify real global hotkeys"
+    Append-Text -TxtPath $txtPath -Line "- next_step: execute qa-gates/phase-4/p4-t1-global-hotkey.md with a physical keyboard"
     Append-Text -TxtPath $txtPath -Line ""
     Append-Text -TxtPath $txtPath -Line "conclusion: BLOCKED"
-    Set-CaseResult -CaseId $caseId -Result "BLOCKED" -Evidence "`$txt"
+    $evidence = if (-not [string]::IsNullOrWhiteSpace($DiagnosticPath)) { "`$txt + `$diag" } else { "`$txt" }
+    Set-CaseResult -CaseId $caseId -Result "BLOCKED" -Evidence $evidence
   }
 }
 
@@ -1258,6 +1273,39 @@ function Stop-HotkeyConflictHelper {
   Wait-DesktopSettle -Milliseconds 500
 }
 
+function Invoke-HotkeyInjectionDiagnostic {
+  $diagnosticPath = Join-Path $outputDir "P4-T1-HOTKEY-DIAG_${runDate}_${EnvId}_${tester}.txt"
+  if (Test-Path $diagnosticPath) {
+    Remove-Item $diagnosticPath -Force
+  }
+
+  $json = & powershell.exe `
+    -NoProfile `
+    -ExecutionPolicy Bypass `
+    -File $hotkeyDiagnosticScript `
+    -HelperScript $helperScript `
+    -OutputPath $diagnosticPath
+  if ($LASTEXITCODE -ne 0) {
+    throw "hotkey injection diagnostic failed with exit code $LASTEXITCODE"
+  }
+
+  $payload = ($json | Out-String).Trim()
+  if ([string]::IsNullOrWhiteSpace($payload)) {
+    throw "hotkey injection diagnostic produced no output"
+  }
+
+  try {
+    $result = $payload | ConvertFrom-Json
+  } catch {
+    throw "failed to parse hotkey injection diagnostic output: $payload"
+  }
+
+  return [pscustomobject]@{
+    Path = $diagnosticPath
+    Result = $result
+  }
+}
+
 function Start-NotepadWindow {
   $windowScript = Join-Path $env:TEMP ("p4t1-background-window-" + [guid]::NewGuid().ToString() + ".ps1")
   $windowCode = @"
@@ -1757,6 +1805,9 @@ try {
   if (-not (Test-Path $helperScript)) {
     $precheckFailures.Add("hotkey conflict helper missing: $helperScript")
   }
+  if (-not (Test-Path $hotkeyDiagnosticScript)) {
+    $precheckFailures.Add("hotkey diagnostic script missing: $hotkeyDiagnosticScript")
+  }
   if ([string]::IsNullOrWhiteSpace($ffmpegExe)) {
     $precheckFailures.Add("ffmpeg not available on PATH")
   }
@@ -1783,15 +1834,14 @@ try {
       }
 
       if ($script:WebDriverHealth.AttachWindowOk) {
-        foreach ($caseId in $selectedCases) {
-          switch ($caseId) {
-            "P4-T1-VG-PASS" { Run-VGPassCase }
-            "P4-T1-IG-PASS" { Run-IGPassCase }
-            "P4-T1-VG-FAIL" { Run-VGFailCase }
-            "P4-T1-IG-FAIL" { Run-IGFailCase }
-          }
-        }
-        Update-MatrixStatus -Status (Get-OverallStatus)
+        $diagnostic = Invoke-HotkeyInjectionDiagnostic
+        $reason = "physical keyboard verification required; injected SendInput hotkeys are diagnostic-only and cannot authoritatively verify RegisterHotKey behavior in this environment"
+        Write-BlockedArtifacts `
+          -Reason $reason `
+          -Phase "manual-verification-required" `
+          -DiagnosticPath $diagnostic.Path `
+          -DiagnosticResult $diagnostic.Result
+        Update-MatrixStatus -Status "BLOCKED"
       }
     }
   }

@@ -1,0 +1,23 @@
+summary: injected SendInput probes did not trigger RegisterHotKey WM_HOTKEY here, so physical keyboard verification is still required
+physical_keyboard_required: true
+helper_script: D:\BME2026\TECHNICAL\Remember\qa-gates-codex\scripts\hotkey-conflict-helper.ps1
+workspace: C:\Users\99741\AppData\Local\Temp\p4t1-hotkey-diag-88c8a7f8-1f29-4765-9145-b0b768f0d33b
+
+probe: Alt+Space
+- triggered: False
+- send_input_ok: True
+- send_input_sent: 4
+- send_input_expected: 4
+- send_input_last_error: 0
+- helper_log: C:\Users\99741\AppData\Local\Temp\p4t1-hotkey-diag-88c8a7f8-1f29-4765-9145-b0b768f0d33b\Alt-Space\helper.log
+- log: [2026-03-19T11:31:39.8268776+08:00] registered Alt+Space conflict helper
+
+probe: Ctrl+Shift+R
+- triggered: False
+- send_input_ok: True
+- send_input_sent: 6
+- send_input_expected: 6
+- send_input_last_error: 0
+- helper_log: C:\Users\99741\AppData\Local\Temp\p4t1-hotkey-diag-88c8a7f8-1f29-4765-9145-b0b768f0d33b\Ctrl-Shift-R\helper.log
+- log: [2026-03-19T11:31:43.6897244+08:00] registered Ctrl+Shift+R conflict helper
+
