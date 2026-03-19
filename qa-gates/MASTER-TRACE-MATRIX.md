@@ -17,7 +17,7 @@
 | P4-T4 | phase-4/p4-t4-submit-and-reorder.md | 提交后排序刷新 | Phase 4 / 子任务 4 | 4 | PASS |
 | P4-T5 | phase-4/p4-t5-silent-detection.md | series.scan_silent | Phase 4 / 子任务 5 | 4 | PASS |
 | P4-T6 | phase-4/p4-t6-archive-readonly.md | series.archive + timeline readonly | Phase 4 / 子任务 6 | 4 | PASS |
-| P5-T3 | phase-5/p5-t3-performance-stability.md | 提交延迟/热键响应 | Phase 5 / 子任务 3 | 4 | TODO |
+| P5-T2 | phase-5/p5-t2-performance-stability.md | 提交延迟/热键响应 | Phase 5 / 子任务 2 | 4 | TODO |
 | P5-T4 | phase-5/p5-t4-release-config-troubleshooting.md | 发布配置/排障文档 | Phase 5 / 子任务 4 | 4 | TODO |
 | P5-T5 | phase-5/p5-t5-release-gate-rollback.md | 发布清单与回滚策略 | Phase 5 / 子任务 5 | 4 | TODO |
 

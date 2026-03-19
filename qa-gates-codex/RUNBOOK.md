@@ -46,3 +46,12 @@ powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\screens
 1. `VG` 用例优先 `web_url`，通过 URL 参数注入 `runtime_mode` 与 `warning` 做页面可视判定。
 2. `IG` 用例必须走 `desktop_window`，以修改 `config.toml + 重启` 验证真实生效链路。
 3. 文本证据固定结构：`输入动作 -> 可视反馈 -> 日志佐证 -> 结论`。
+
+## 7) P5-T2 自动化性能基线
+```powershell
+# smoke (no state write-back)
+powershell -ExecutionPolicy Bypass -File .\qa-gates-codex\scripts\run-p5-t2-performance-stability.ps1 -EnvId ENV-SQLITE -Tester codex-smoke -SampleCount 5 -UpdateState:$false
+
+# full baseline (writes task/matrix on PASS)
+powershell -ExecutionPolicy Bypass -File .\qa-gates-codex\scripts\run-p5-t2-performance-stability.ps1 -EnvId ENV-SQLITE -Tester codex -SampleCount 20
+```

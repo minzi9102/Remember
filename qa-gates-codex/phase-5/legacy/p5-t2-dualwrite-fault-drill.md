@@ -1,3 +1,11 @@
+# Legacy Notice
+
+- 本文件为历史归档：原 P5-T2 双写故障演练。
+- 当前分支已冻结为 SQLite-only，该门禁不再属于当前发布验收能力。
+- 仅用于历史追溯，不作为当前 PASS/FAIL 依据。
+
+---
+
 # P5-T2 双写故障演练 Codex 执行版门禁测试
 
 ## 目标
@@ -114,6 +122,7 @@ $env:PW_BROWSER = 'msedge'
   2. 若复测仍失败，升级为阻断级。
 
 ## 追踪映射
-- source gate: `qa-gates/phase-5/p5-t2-dualwrite-fault-drill.md`
+- source gate: `qa-gates-codex/phase-5/legacy/p5-t2-dualwrite-fault-drill.md`
 - DEV.md 映射: dual_sync 失败/补偿
 - ROADMAP.md 映射: Phase 5 / 子任务 2
+

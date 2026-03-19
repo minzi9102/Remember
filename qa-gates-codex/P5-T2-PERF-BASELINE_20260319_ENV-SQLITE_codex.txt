@@ -1,0 +1,68 @@
+task_id: P5-T2
+task_name: performance and stability baseline
+target_mode: automated_performance_stability_baseline
+env_id: ENV-SQLITE
+runtime_mode: sqlite_only
+run_date: 20260319
+tester: codex
+sample_count: 20
+regression_window: 1
+script: qa-gates-codex/scripts/run-p5-t2-performance-stability.ps1
+threshold_profile: balanced
+
+prechecks:
+- id: tauri_executable
+  result: PASS
+  note: D:\BME2026\TECHNICAL\Remember\src-tauri\target\debug\tauri-app.exe
+- id: uv_python
+  result: PASS
+  note: D:\BME2026\TECHNICAL\Remember\.venv\Scripts\python.exe
+- id: trace_matrix
+  result: PASS
+  note: D:\BME2026\TECHNICAL\Remember\qa-gates-codex\MASTER-TRACE-MATRIX.md
+- id: task_jsonl
+  result: PASS
+  note: D:\BME2026\TECHNICAL\Remember\task.jsonl
+
+hotkey_latency_ms:
+hotkey_sample_events: 40
+hotkey_observed_events: 40
+hotkey_p75_ms: 0.02
+hotkey_p95_ms: 4.3
+hotkey_max_ms: 22.83
+hotkey_timeout_count: 0
+
+commit_latency_ms:
+commit_sample_events: 20
+commit_observed_events: 20
+commit_p75_ms: 3.64
+commit_p95_ms: 4.03
+commit_max_ms: 4.6
+commit_timeout_count: 0
+commit_failure_count: 0
+
+stability:
+pass_rate_pct: 100
+crash_count: 0
+timeout_count: 0
+
+regression_delta:
+previous_report: D:\BME2026\TECHNICAL\Remember\qa-gates-codex\P5-T2-PERF-BASELINE_20260319_ENV-SQLITE_codex-smoke.txt
+hotkey_p75_delta_pct: -99.57
+hotkey_p95_delta_pct: -82.3
+commit_p75_delta_pct: 7.37
+commit_p95_delta_pct: 6.33
+
+gates:
+hotkey_gate: PASS
+commit_gate: PASS
+stability_gate: PASS
+regression_gate: PASS
+
+logs:
+- C:\Users\99741\AppData\Local\Temp\p5t2-perf-baseline-0dd9096a63e34fadabab4292592d8038\tauri-app.out.log
+- C:\Users\99741\AppData\Local\Temp\p5t2-perf-baseline-0dd9096a63e34fadabab4292592d8038\tauri-app.err.log
+log_dir: C:\Users\99741\AppData\Local\Temp\p5t2-perf-baseline-0dd9096a63e34fadabab4292592d8038
+
+conclusion: PASS
+overall: PASS
