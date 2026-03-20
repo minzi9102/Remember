@@ -4,7 +4,7 @@
   line-height: 1.5;
   font-weight: 400;
   color: #1f2937;
-  background: transparent;
+  background: rgba(247, 241, 232, 0.84);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -26,7 +26,7 @@ body,
 #root {
   width: 100%;
   min-height: 100%;
-  background: transparent;
+  background: rgba(247, 241, 232, 0.84);
 }
 
 button {
@@ -37,8 +37,54 @@ button {
   margin: 0 auto;
   max-width: 1200px;
   min-height: 100vh;
-  padding: 28px 20px 40px;
+  padding: 0 20px 40px;
   background: transparent;
+}
+
+.top-dock {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  border-bottom: 1px solid rgba(251, 191, 36, 0.24);
+  background: rgba(255, 251, 244, 0.86);
+  backdrop-filter: blur(12px);
+}
+
+.top-dock-header {
+  margin: 0;
+  padding: 14px 20px 10px;
+}
+
+.top-dock-panel {
+  border: 0;
+  border-top: 1px solid rgba(251, 191, 36, 0.2);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 12px 0 14px;
+}
+
+.top-dock-panel .panel-heading,
+.top-dock-panel .config-warning-banner,
+.top-dock-panel .command-surface,
+.top-dock-panel .command-status {
+  margin-left: 20px;
+  margin-right: 20px;
+}
+
+.top-dock .main-rail {
+  border-left: 0;
+  border-right: 0;
+  border-radius: 0;
+  padding: 12px 0;
+  overflow-y: hidden;
+}
+
+.top-dock .empty-state {
+  margin: 0 20px;
 }
 
 .remember-shell-loading {
@@ -118,6 +164,7 @@ button {
 }
 
 .workspace-stage {
+  margin-top: 16px;
   margin-bottom: 18px;
 }
 
@@ -625,7 +672,21 @@ button {
 
 @media (max-width: 920px) {
   .remember-shell {
+    padding: 0 16px 40px;
+  }
+
+  .top-dock-header {
+    padding-left: 16px;
     padding-right: 16px;
+  }
+
+  .top-dock-panel .panel-heading,
+  .top-dock-panel .config-warning-banner,
+  .top-dock-panel .command-surface,
+  .top-dock-panel .command-status,
+  .top-dock .empty-state {
+    margin-left: 16px;
+    margin-right: 16px;
   }
 
   .series-card {
@@ -636,7 +697,7 @@ button {
 
 @media (max-width: 760px) {
   .remember-shell {
-    padding: 24px 16px 32px;
+    padding: 0 16px 32px;
   }
 
   .shell-header,

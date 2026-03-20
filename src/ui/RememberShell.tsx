@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 import { findSeriesById } from "../application/shell-view-model";
 import type { CommitItem, SeriesCollection, ShellState } from "../application/types";
@@ -55,37 +55,50 @@ export function RememberShell({
   const listHint = isArchivedCollection
     ? "`↑/↓` select, `→` opens timeline, `/` searches. Archived series stay read-only."
     : "`↑/↓` select, `→` opens timeline, `/` searches, `Shift+N` creates, `a` archives silent, type to capture.";
+  const selectedSeriesCardRef = useRef<HTMLLIElement | null>(null);
+
+  useEffect(() => {
+    if (shell.selectedSeriesId === null || shell.seriesList.length === 0) {
+      return;
+    }
+
+    selectedSeriesCardRef.current?.scrollIntoView({
+      behavior: "auto",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [shell.selectedSeriesId, shell.seriesCollection, shell.seriesList]);
 
   return (
     <main className="remember-shell" data-testid="remember-shell">
-      <header className="shell-header">
-        <div>
-          <p className="shell-kicker">Low-friction capture</p>
-          <h1>{shell.appTitle}</h1>
-          <p>{shell.subtitle}</p>
-        </div>
-        <div className="shell-header-actions">
-          <button
-            type="button"
-            className="diagnostics-toggle-button"
-            data-testid="diagnostics-drawer-toggle"
-            aria-expanded={isDiagnosticsDrawerOpen}
-            aria-controls="diagnostics-drawer-panel"
-            onClick={onToggleDiagnosticsDrawer}
-          >
-            Diagnostics
-          </button>
-          <div className="layer-tags">
-            <span>UI: ready</span>
-            <span>Adapter: {shell.layers.adapter}</span>
-            <span>Application: {shell.layers.application}</span>
-            <span>Repository: {shell.layers.repository}</span>
+      <section className="top-dock" data-testid="top-dock">
+        <header className="shell-header top-dock-header">
+          <div>
+            <p className="shell-kicker">Low-friction capture</p>
+            <h1>{shell.appTitle}</h1>
+            <p>{shell.subtitle}</p>
           </div>
-        </div>
-      </header>
+          <div className="shell-header-actions">
+            <button
+              type="button"
+              className="diagnostics-toggle-button"
+              data-testid="diagnostics-drawer-toggle"
+              aria-expanded={isDiagnosticsDrawerOpen}
+              aria-controls="diagnostics-drawer-panel"
+              onClick={onToggleDiagnosticsDrawer}
+            >
+              Diagnostics
+            </button>
+            <div className="layer-tags">
+              <span>UI: ready</span>
+              <span>Adapter: {shell.layers.adapter}</span>
+              <span>Application: {shell.layers.application}</span>
+              <span>Repository: {shell.layers.repository}</span>
+            </div>
+          </div>
+        </header>
 
-      <section className="workspace-stage cross-axis-stage" data-testid="workspace-stage">
-        <article className="panel stage-panel cross-axis-main" data-testid="series-list-panel">
+        <article className="panel stage-panel cross-axis-main top-dock-panel" data-testid="series-list-panel">
           <div className="panel-heading">
             <div>
               <p className="panel-kicker">Main Rail</p>
@@ -199,6 +212,7 @@ export function RememberShell({
                   return (
                     <li
                       key={item.id}
+                      ref={isSelected ? selectedSeriesCardRef : null}
                       className={`series-card${isSelected ? " is-selected" : ""}${isSilent ? " is-silent" : ""}${isArchived ? " is-archived" : ""}`}
                       data-testid={`series-row-${item.id}`}
                     >
@@ -272,6 +286,9 @@ export function RememberShell({
             </p>
           ) : null}
         </article>
+      </section>
+
+      <section className="workspace-stage cross-axis-stage" data-testid="workspace-stage">
 
         {shell.view === "timeline" ? (
           <article className="panel stage-panel timeline-lane" data-testid="timeline-lane">
