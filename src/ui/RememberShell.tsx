@@ -51,7 +51,6 @@ export function RememberShell({
   const selectedSeries = findSeriesById(shell.seriesList, shell.selectedSeriesId);
   const isArchivedCollection = shell.seriesCollection === "archived";
   const timelineIsArchived = shell.activeTimelineSeries?.status === "archived";
-  const listHeadingTitle = isArchivedCollection ? "Archived Series" : "Active Series";
   const listHint = isArchivedCollection
     ? "`↑/↓` select, `→` opens timeline, `/` searches. Archived series stay read-only."
     : "`↑/↓` select, `→` opens timeline, `/` searches, `Shift+N` creates, `a` archives silent, type to capture.";
@@ -110,64 +109,8 @@ export function RememberShell({
 
   return (
     <main className="remember-shell" data-testid="remember-shell">
-      <section className="top-dock" data-testid="top-dock">
-        <header className="shell-header top-dock-header">
-          <div>
-            <p className="shell-kicker">Low-friction capture</p>
-            <h1>{shell.appTitle}</h1>
-            <p>{shell.subtitle}</p>
-          </div>
-          <div className="shell-header-actions">
-            <button
-              type="button"
-              className="diagnostics-toggle-button"
-              data-testid="diagnostics-drawer-toggle"
-              aria-expanded={isDiagnosticsDrawerOpen}
-              aria-controls="diagnostics-drawer-panel"
-              onClick={onToggleDiagnosticsDrawer}
-            >
-              Diagnostics
-            </button>
-            <div className="layer-tags">
-              <span>UI: ready</span>
-              <span>Adapter: {shell.layers.adapter}</span>
-              <span>Application: {shell.layers.application}</span>
-              <span>Repository: {shell.layers.repository}</span>
-            </div>
-          </div>
-        </header>
-
+      <section className="top-dock main-rail-wrapper" data-testid="top-dock">
         <article className="panel stage-panel cross-axis-main top-dock-panel" data-testid="series-list-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="panel-kicker">Main Rail</p>
-              <h2>{listHeadingTitle}</h2>
-            </div>
-            <div className="list-heading-actions">
-              <div className="collection-toggle" data-testid="series-collection-toggle">
-                <button
-                  type="button"
-                  className={`collection-toggle-button${!isArchivedCollection ? " is-active" : ""}`}
-                  data-testid="series-collection-active-button"
-                  aria-pressed={!isArchivedCollection}
-                  onClick={() => onSelectCollection("active")}
-                >
-                  Active
-                </button>
-                <button
-                  type="button"
-                  className={`collection-toggle-button${isArchivedCollection ? " is-active" : ""}`}
-                  data-testid="series-collection-archived-button"
-                  aria-pressed={isArchivedCollection}
-                  onClick={() => onSelectCollection("archived")}
-                >
-                  Archived
-                </button>
-              </div>
-              <p className="panel-hint">{listHint}</p>
-            </div>
-          </div>
-
           {shell.navigationError !== null ? (
             <div className="config-warning-banner" data-testid="series-list-error">
               <strong>{shell.navigationError.code}</strong>
@@ -409,6 +352,45 @@ export function RememberShell({
         ) : null}
       </section>
 
+      <div className="floating-corner-controls" data-testid="floating-corner-controls">
+        <button
+          type="button"
+          className="diagnostics-toggle-button diagnostics-toggle-button-mini"
+          data-testid="diagnostics-drawer-toggle"
+          aria-expanded={isDiagnosticsDrawerOpen}
+          aria-controls="diagnostics-drawer-panel"
+          onClick={onToggleDiagnosticsDrawer}
+        >
+          Diag
+        </button>
+        <div className="view-toggle-container" data-testid="view-toggle-container">
+          <div className="collection-toggle" data-testid="series-collection-toggle">
+            <button
+              type="button"
+              className={`collection-toggle-button${!isArchivedCollection ? " is-active" : ""}`}
+              data-testid="series-collection-active-button"
+              aria-pressed={!isArchivedCollection}
+              onClick={() => onSelectCollection("active")}
+            >
+              Active
+            </button>
+            <button
+              type="button"
+              className={`collection-toggle-button${isArchivedCollection ? " is-active" : ""}`}
+              data-testid="series-collection-archived-button"
+              aria-pressed={isArchivedCollection}
+              onClick={() => onSelectCollection("archived")}
+            >
+              Archived
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <p className="shortcut-hints-watermark" data-testid="shortcut-hints-watermark">
+        {listHint}
+      </p>
+
       <aside
         id="diagnostics-drawer-panel"
         className={`diagnostics-drawer${isDiagnosticsDrawerOpen ? " is-open" : ""}`}
@@ -525,12 +507,6 @@ export function RememberShell({
           </section>
         </section>
       </aside>
-
-      {selectedSeries !== null ? (
-        <p className="selection-footer" data-testid="selection-footer">
-          Selected {isArchivedCollection ? "archived" : "active"} series: {selectedSeries.name}
-        </p>
-      ) : null}
     </main>
   );
 }

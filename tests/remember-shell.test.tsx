@@ -103,20 +103,27 @@ function renderShellMarkup(shell: ShellState, options?: { drawerOpen?: boolean }
 }
 
 describe("RememberShell sqlite-only views", () => {
-  it("renders list diagnostics and startup self-heal summary", () => {
+  it("renders minimalist rail layout with floating controls", () => {
     const markup = renderShellMarkup(buildShell());
 
     expect(markup).toContain("Series");
     expect(markup).toContain("Inbox");
     expect(markup).toContain("Silent");
     expect(markup).toContain("data-testid=\"top-dock\"");
-    expect(markup).toContain("data-testid=\"workspace-stage\"");
     expect(markup).toContain("data-testid=\"main-rail\"");
     expect(markup).toContain("data-testid=\"series-rail\"");
+    expect(markup).toContain("data-testid=\"floating-corner-controls\"");
+    expect(markup).toContain("data-testid=\"view-toggle-container\"");
+    expect(markup).toContain("data-testid=\"shortcut-hints-watermark\"");
     expect(markup).toContain("data-testid=\"workspace-glass-placeholder\"");
     expect(markup).toContain("data-testid=\"diagnostics-drawer-toggle\"");
     expect(markup).toContain("aria-controls=\"diagnostics-drawer-panel\"");
     expect(markup).toContain("aria-expanded=\"false\"");
+    expect(markup).not.toContain("Low-friction capture");
+    expect(markup).not.toContain("UI: ready");
+    expect(markup).not.toContain("Main Rail");
+    expect(markup).not.toContain("Active Series");
+    expect(markup).not.toContain("data-testid=\"selection-footer\"");
     expect(markup).toContain("Startup Self-Heal");
     expect(markup).toContain("No unresolved startup alerts.");
   });
@@ -212,7 +219,6 @@ describe("RememberShell sqlite-only views", () => {
     expect(timelineMarkup).toContain("data-testid=\"timeline-lane\"");
     expect(timelineMarkup).toContain("first-note");
     expect(timelineMarkup).not.toContain("data-testid=\"workspace-glass-placeholder\"");
-    expect(archivedMarkup).toContain("Archived Series");
     expect(archivedMarkup).toContain("Archived series stay read-only.");
   });
 

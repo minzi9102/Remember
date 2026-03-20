@@ -19,14 +19,17 @@
 
 body {
   margin: 0;
+  overflow: hidden;
 }
 
 html,
 body,
 #root {
-  width: 100%;
-  height: 100%;
-  min-height: 100%;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
   background: transparent;
 }
@@ -36,27 +39,34 @@ button {
 }
 
 .remember-shell {
-  margin: 0 auto;
-  max-width: 1200px;
+  position: relative;
+  width: 100vw;
+  max-width: none;
   height: 100vh;
+  height: 100dvh;
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 0 20px 40px;
+  padding: 0;
   background: transparent;
 }
 
 .top-dock {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  margin-right: calc(50% - 50vw);
+  position: relative;
+  z-index: 20;
+  width: 100%;
+  margin: 0;
+  padding: calc(24px + env(safe-area-inset-top)) 16px 24px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   background: #fafafa;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  flex: 0 0 auto;
+}
+
+.main-rail-wrapper {
+  margin-top: 0;
 }
 
 .top-dock-header {
@@ -70,27 +80,29 @@ button {
   border-radius: 0;
   background: #fafafa;
   box-shadow: none;
-  padding: 12px 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.top-dock-panel .panel-heading,
 .top-dock-panel .config-warning-banner,
 .top-dock-panel .command-surface,
 .top-dock-panel .command-status {
-  margin-left: 20px;
-  margin-right: 20px;
+  margin-left: 0;
+  margin-right: 0;
 }
 
 .top-dock .main-rail {
   border-left: 0;
   border-right: 0;
   border-radius: 0;
-  padding: 12px 0;
+  padding: 12px 0 16px;
   overflow-y: hidden;
 }
 
 .top-dock .empty-state {
-  margin: 0 20px;
+  margin: 0;
 }
 
 .remember-shell-loading {
@@ -137,17 +149,32 @@ button {
 .diagnostics-toggle-button {
   border: 1px solid #fdba74;
   border-radius: 999px;
-  background: #fff7ed;
+  background: rgba(255, 247, 237, 0.9);
   color: #9a3412;
   cursor: pointer;
   font-weight: 700;
-  padding: 8px 14px;
+  padding: 6px 11px;
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .diagnostics-toggle-button:hover,
 .diagnostics-toggle-button:focus-visible {
   outline: none;
-  background: #ffedd5;
+  background: rgba(255, 237, 213, 0.95);
+}
+
+.diagnostics-toggle-button-mini {
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+}
+
+.diagnostics-toggle-button-mini:hover,
+.diagnostics-toggle-button-mini:focus-visible {
+  opacity: 1;
 }
 
 .layer-tags {
@@ -169,13 +196,61 @@ button {
   padding: 4px 10px;
 }
 
+.floating-corner-controls {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.floating-corner-controls .diagnostics-toggle-button,
+.floating-corner-controls .view-toggle-container {
+  pointer-events: auto;
+}
+
+.view-toggle-container {
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+}
+
+.view-toggle-container:hover,
+.view-toggle-container:focus-within {
+  opacity: 1;
+}
+
+.view-toggle-container .collection-toggle {
+  background: rgba(255, 247, 237, 0.84);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.shortcut-hints-watermark {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 10;
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: rgba(120, 113, 108, 0.36);
+  pointer-events: none;
+  text-align: center;
+}
+
 .workspace-stage {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  margin-top: 16px;
-  margin-bottom: 18px;
+  margin: 0;
+  padding: 16px 16px calc(72px + env(safe-area-inset-bottom));
 }
 
 .workspace-glass-placeholder {
@@ -207,9 +282,7 @@ button {
 }
 
 .cross-axis-stage {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+  display: grid;
   gap: 16px;
 }
 
@@ -514,8 +587,6 @@ button {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 0;
-  overflow: hidden;
 }
 
 .timeline-list {
@@ -525,8 +596,6 @@ button {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  min-height: 0;
-  overflow-y: auto;
 }
 
 .timeline-entry {
@@ -580,24 +649,30 @@ button {
 
 .diagnostics-drawer {
   position: fixed;
-  top: 0;
-  right: 0;
-  width: min(560px, 90vw);
-  height: 100vh;
-  padding: 18px;
-  background: rgba(248, 250, 252, 0.98);
-  border-left: 1px solid #e2e8f0;
-  box-shadow: -18px 0 40px rgba(15, 23, 42, 0.1);
-  transform: translateX(105%);
-  transition: transform 180ms ease;
+  top: calc(12px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
+  width: min(420px, 78vw);
+  height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  max-height: calc(100vh - 24px);
+  padding: 14px;
+  background: rgba(248, 250, 252, 0.94);
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 16px;
+  box-shadow: -12px 0 32px rgba(15, 23, 42, 0.12);
+  transform: translateX(calc(100% + 18px));
+  transition:
+    transform 180ms ease,
+    opacity 180ms ease;
   overflow-y: auto;
-  z-index: 40;
+  z-index: 110;
   pointer-events: none;
+  opacity: 0;
 }
 
 .diagnostics-drawer.is-open {
   transform: translateX(0);
   pointer-events: auto;
+  opacity: 1;
 }
 
 .diagnostics-drawer-header {
@@ -666,8 +741,7 @@ button {
 }
 
 .config-warning-banner p,
-.config-ok,
-.selection-footer {
+.config-ok {
   margin: 0;
 }
 
@@ -696,29 +770,15 @@ button {
   overflow-x: auto;
 }
 
-.selection-footer {
-  margin-top: 16px;
-  color: #78716c;
-  font-size: 0.92rem;
-}
-
 @media (max-width: 920px) {
-  .remember-shell {
-    padding: 0 16px 40px;
-  }
-
-  .top-dock-header {
+  .top-dock {
     padding-left: 16px;
     padding-right: 16px;
   }
 
-  .top-dock-panel .panel-heading,
-  .top-dock-panel .config-warning-banner,
-  .top-dock-panel .command-surface,
-  .top-dock-panel .command-status,
-  .top-dock .empty-state {
-    margin-left: 16px;
-    margin-right: 16px;
+  .workspace-stage {
+    padding-left: 14px;
+    padding-right: 14px;
   }
 
   .series-card {
@@ -728,27 +788,8 @@ button {
 }
 
 @media (max-width: 760px) {
-  .remember-shell {
-    padding: 0 16px 32px;
-  }
-
-  .shell-header,
   .panel-heading {
     flex-direction: column;
-  }
-
-  .shell-header-actions {
-    width: 100%;
-    align-items: stretch;
-  }
-
-  .diagnostics-toggle-button {
-    width: 100%;
-    text-align: center;
-  }
-
-  .layer-tags {
-    justify-content: flex-start;
   }
 
   .panel-hint {
@@ -756,14 +797,13 @@ button {
     text-align: left;
   }
 
-  .timeline-heading-actions,
-  .list-heading-actions {
+  .timeline-heading-actions {
     align-items: stretch;
   }
 
   .series-card {
-    width: 86vw;
-    min-width: 86vw;
+    width: 82vw;
+    min-width: 82vw;
   }
 
   .series-open-button,
@@ -778,18 +818,34 @@ button {
     flex-direction: column;
   }
 
-  .collection-toggle {
-    width: 100%;
-    justify-content: stretch;
+  .floating-corner-controls {
+    top: calc(10px + env(safe-area-inset-top));
+    right: calc(10px + env(safe-area-inset-right));
   }
 
-  .collection-toggle-button {
-    flex: 1 1 0;
+  .view-toggle-container .collection-toggle {
+    width: auto;
+  }
+
+  .view-toggle-container .collection-toggle-button {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+
+  .shortcut-hints-watermark {
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    max-width: calc(100vw - 28px);
+  }
+
+  .workspace-stage {
+    padding: 14px 12px calc(72px + env(safe-area-inset-bottom));
   }
 
   .diagnostics-drawer {
-    width: 100vw;
-    padding: 14px;
+    top: calc(10px + env(safe-area-inset-top));
+    right: calc(10px + env(safe-area-inset-right));
+    width: min(360px, calc(100vw - 20px));
+    height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   }
 }
 
