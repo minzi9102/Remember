@@ -16,7 +16,11 @@ interface RememberShellProps {
   onBackToList: () => void;
   onRetryTimeline: () => void;
   onSearchQueryChange: (query: string) => void;
+  onSearchCompositionStart: () => void;
+  onSearchCompositionEnd: () => void;
   onNewSeriesNameDraftChange: (value: string) => void;
+  onCreateSeriesCompositionStart: () => void;
+  onCreateSeriesCompositionEnd: () => void;
   onCommitDraftChange: (value: string) => void;
   onCommitDraftCompositionStart: () => void;
   onCommitDraftCompositionEnd: () => void;
@@ -46,7 +50,11 @@ export function RememberShell({
   onBackToList,
   onRetryTimeline,
   onSearchQueryChange,
+  onSearchCompositionStart,
+  onSearchCompositionEnd,
   onNewSeriesNameDraftChange,
+  onCreateSeriesCompositionStart,
+  onCreateSeriesCompositionEnd,
   onCommitDraftChange,
   onCommitDraftCompositionStart,
   onCommitDraftCompositionEnd,
@@ -187,6 +195,8 @@ export function RememberShell({
                 type="text"
                 value={shell.searchQuery}
                 onChange={(event) => onSearchQueryChange(event.target.value)}
+                onCompositionStart={onSearchCompositionStart}
+                onCompositionEnd={onSearchCompositionEnd}
                 placeholder="Type to filter series names"
                 autoComplete="off"
                 spellCheck={false}
@@ -211,6 +221,8 @@ export function RememberShell({
                 type="text"
                 value={shell.newSeriesNameDraft}
                 onChange={(event) => onNewSeriesNameDraftChange(event.target.value)}
+                onCompositionStart={onCreateSeriesCompositionStart}
+                onCompositionEnd={onCreateSeriesCompositionEnd}
                 placeholder="Series name"
                 autoComplete="off"
                 spellCheck={false}

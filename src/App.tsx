@@ -47,6 +47,8 @@ function App() {
   const latestPreviewKeyRef = useRef<string | null>(null);
   const seededCommitCharRef = useRef<string | null>(null);
   const isCommitComposingRef = useRef(false);
+  const isSearchComposingRef = useRef(false);
+  const isCreateSeriesComposingRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -616,14 +618,10 @@ function App() {
         }
         return;
       case "open_search":
-        startTransition(() => {
-          dispatch({ type: "interaction.search.opened" });
-        });
+        dispatch({ type: "interaction.search.opened" });
         return;
       case "open_create_series":
-        startTransition(() => {
-          dispatch({ type: "interaction.create_series.opened" });
-        });
+        dispatch({ type: "interaction.create_series.opened" });
         return;
       case "submit_create_series":
         void submitCreateSeries();
@@ -676,6 +674,22 @@ function App() {
     seededCommitCharRef.current = null;
   });
 
+  const handleSearchCompositionStart = useEffectEvent(() => {
+    isSearchComposingRef.current = true;
+  });
+
+  const handleSearchCompositionEnd = useEffectEvent(() => {
+    isSearchComposingRef.current = false;
+  });
+
+  const handleCreateSeriesCompositionStart = useEffectEvent(() => {
+    isCreateSeriesComposingRef.current = true;
+  });
+
+  const handleCreateSeriesCompositionEnd = useEffectEvent(() => {
+    isCreateSeriesComposingRef.current = false;
+  });
+
   if (shell === null) {
     return <RememberShellLoading />;
   }
@@ -713,15 +727,23 @@ function App() {
         }
       }}
       onSearchQueryChange={(query) => {
-        startTransition(() => {
-          dispatch({ type: "interaction.search.changed", query });
-        });
+        dispatch({ type: "interaction.search.changed", query });
         void runSeriesSearch(query);
       }}
+      onSearchCompositionStart={() => {
+        handleSearchCompositionStart();
+      }}
+      onSearchCompositionEnd={() => {
+        handleSearchCompositionEnd();
+      }}
       onNewSeriesNameDraftChange={(value) => {
-        startTransition(() => {
-          dispatch({ type: "interaction.create_series.changed", value });
-        });
+        dispatch({ type: "interaction.create_series.changed", value });
+      }}
+      onCreateSeriesCompositionStart={() => {
+        handleCreateSeriesCompositionStart();
+      }}
+      onCreateSeriesCompositionEnd={() => {
+        handleCreateSeriesCompositionEnd();
       }}
       onCommitDraftChange={(value) => {
         dispatch({ type: "interaction.draft_commit.changed", value });

@@ -96,7 +96,11 @@ function renderShellMarkup(shell: ShellState, options?: { drawerOpen?: boolean }
       onBackToList={noop}
       onRetryTimeline={noop}
       onSearchQueryChange={noop}
+      onSearchCompositionStart={noop}
+      onSearchCompositionEnd={noop}
       onNewSeriesNameDraftChange={noop}
+      onCreateSeriesCompositionStart={noop}
+      onCreateSeriesCompositionEnd={noop}
       onCommitDraftChange={noop}
       onCommitDraftCompositionStart={noop}
       onCommitDraftCompositionEnd={noop}
