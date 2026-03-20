@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useEffectEvent, useReducer, useRef } from "react";
+import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
 
 import {
   appendCommit,
@@ -37,6 +37,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
 
 function App() {
   const [shell, dispatch] = useReducer(appReducer, null);
+  const [isDiagnosticsDrawerOpen, setIsDiagnosticsDrawerOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const createSeriesInputRef = useRef<HTMLInputElement | null>(null);
   const commitInputRef = useRef<HTMLInputElement | null>(null);
@@ -599,6 +600,10 @@ function App() {
   return (
     <RememberShell
       shell={shell}
+      isDiagnosticsDrawerOpen={isDiagnosticsDrawerOpen}
+      onToggleDiagnosticsDrawer={() => {
+        setIsDiagnosticsDrawerOpen((open) => !open);
+      }}
       searchInputRef={searchInputRef}
       createSeriesInputRef={createSeriesInputRef}
       commitInputRef={commitInputRef}

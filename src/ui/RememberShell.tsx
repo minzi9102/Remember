@@ -5,6 +5,8 @@ import type { CommitItem, SeriesCollection, ShellState } from "../application/ty
 
 interface RememberShellProps {
   shell: ShellState;
+  isDiagnosticsDrawerOpen: boolean;
+  onToggleDiagnosticsDrawer: () => void;
   searchInputRef?: RefObject<HTMLInputElement | null>;
   createSeriesInputRef?: RefObject<HTMLInputElement | null>;
   commitInputRef?: RefObject<HTMLInputElement | null>;
@@ -31,6 +33,8 @@ export function RememberShellLoading() {
 
 export function RememberShell({
   shell,
+  isDiagnosticsDrawerOpen,
+  onToggleDiagnosticsDrawer,
   searchInputRef,
   createSeriesInputRef,
   commitInputRef,
@@ -60,110 +64,122 @@ export function RememberShell({
           <h1>{shell.appTitle}</h1>
           <p>{shell.subtitle}</p>
         </div>
-        <div className="layer-tags">
-          <span>UI: ready</span>
-          <span>Adapter: {shell.layers.adapter}</span>
-          <span>Application: {shell.layers.application}</span>
-          <span>Repository: {shell.layers.repository}</span>
+        <div className="shell-header-actions">
+          <button
+            type="button"
+            className="diagnostics-toggle-button"
+            data-testid="diagnostics-drawer-toggle"
+            aria-expanded={isDiagnosticsDrawerOpen}
+            aria-controls="diagnostics-drawer-panel"
+            onClick={onToggleDiagnosticsDrawer}
+          >
+            Diagnostics
+          </button>
+          <div className="layer-tags">
+            <span>UI: ready</span>
+            <span>Adapter: {shell.layers.adapter}</span>
+            <span>Application: {shell.layers.application}</span>
+            <span>Repository: {shell.layers.repository}</span>
+          </div>
         </div>
       </header>
 
-      <section className="workspace-stage" data-testid="workspace-stage">
-        {shell.view === "series_list" ? (
-          <article className="panel stage-panel" data-testid="series-list-panel">
-            <div className="panel-heading">
-              <div>
-                <p className="panel-kicker">Level 1</p>
-                <h2>{listHeadingTitle}</h2>
-              </div>
-              <div className="list-heading-actions">
-                <div className="collection-toggle" data-testid="series-collection-toggle">
-                  <button
-                    type="button"
-                    className={`collection-toggle-button${!isArchivedCollection ? " is-active" : ""}`}
-                    data-testid="series-collection-active-button"
-                    aria-pressed={!isArchivedCollection}
-                    onClick={() => onSelectCollection("active")}
-                  >
-                    Active
-                  </button>
-                  <button
-                    type="button"
-                    className={`collection-toggle-button${isArchivedCollection ? " is-active" : ""}`}
-                    data-testid="series-collection-archived-button"
-                    aria-pressed={isArchivedCollection}
-                    onClick={() => onSelectCollection("archived")}
-                  >
-                    Archived
-                  </button>
-                </div>
-                <p className="panel-hint">{listHint}</p>
-              </div>
+      <section className="workspace-stage cross-axis-stage" data-testid="workspace-stage">
+        <article className="panel stage-panel cross-axis-main" data-testid="series-list-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="panel-kicker">Main Rail</p>
+              <h2>{listHeadingTitle}</h2>
             </div>
-
-            {shell.navigationError !== null ? (
-              <div className="config-warning-banner" data-testid="series-list-error">
-                <strong>{shell.navigationError.code}</strong>
-                <p>{shell.navigationError.message}</p>
+            <div className="list-heading-actions">
+              <div className="collection-toggle" data-testid="series-collection-toggle">
+                <button
+                  type="button"
+                  className={`collection-toggle-button${!isArchivedCollection ? " is-active" : ""}`}
+                  data-testid="series-collection-active-button"
+                  aria-pressed={!isArchivedCollection}
+                  onClick={() => onSelectCollection("active")}
+                >
+                  Active
+                </button>
+                <button
+                  type="button"
+                  className={`collection-toggle-button${isArchivedCollection ? " is-active" : ""}`}
+                  data-testid="series-collection-archived-button"
+                  aria-pressed={isArchivedCollection}
+                  onClick={() => onSelectCollection("archived")}
+                >
+                  Archived
+                </button>
               </div>
-            ) : null}
+              <p className="panel-hint">{listHint}</p>
+            </div>
+          </div>
 
-            {shell.interactionFeedback !== null ? (
-              <div className="config-warning-banner interaction-feedback" data-testid="interaction-feedback-banner">
-                <strong>{shell.interactionFeedback.code}</strong>
-                <p>{shell.interactionFeedback.message}</p>
-              </div>
-            ) : null}
+          {shell.navigationError !== null ? (
+            <div className="config-warning-banner" data-testid="series-list-error">
+              <strong>{shell.navigationError.code}</strong>
+              <p>{shell.navigationError.message}</p>
+            </div>
+          ) : null}
 
-            {shell.interactionMode === "search" ? (
-              <div className="command-surface" data-testid="search-command-bar">
-                <label className="command-label" htmlFor="series-search-input">
-                  Search series
-                </label>
-                <input
-                  id="series-search-input"
-                  ref={searchInputRef}
-                  className="command-input"
-                  data-testid="search-command-input"
-                  type="text"
-                  value={shell.searchQuery}
-                  onChange={(event) => onSearchQueryChange(event.target.value)}
-                  placeholder="Type to filter series names"
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                <p className="command-help">
-                  Esc closes search and restores the full list.
-                  {shell.pendingAction === "search" ? " Searching..." : ""}
-                </p>
-              </div>
-            ) : null}
+          {shell.interactionFeedback !== null ? (
+            <div className="config-warning-banner interaction-feedback" data-testid="interaction-feedback-banner">
+              <strong>{shell.interactionFeedback.code}</strong>
+              <p>{shell.interactionFeedback.message}</p>
+            </div>
+          ) : null}
 
-            {!isArchivedCollection && shell.interactionMode === "create_series" ? (
-              <div className="command-surface" data-testid="create-series-command-bar">
-                <label className="command-label" htmlFor="series-create-input">
-                  Create a new series
-                </label>
-                <input
-                  id="series-create-input"
-                  ref={createSeriesInputRef}
-                  className="command-input"
-                  data-testid="create-series-command-input"
-                  type="text"
-                  value={shell.newSeriesNameDraft}
-                  onChange={(event) => onNewSeriesNameDraftChange(event.target.value)}
-                  placeholder="Series name"
-                  autoComplete="off"
-                  spellCheck={false}
-                  disabled={shell.pendingAction === "create_series"}
-                />
-                <p className="command-help">
-                  Enter creates the series. Esc cancels.
-                  {shell.pendingAction === "create_series" ? " Creating..." : ""}
-                </p>
-              </div>
-            ) : null}
+          {shell.view === "series_list" && shell.interactionMode === "search" ? (
+            <div className="command-surface command-surface-global" data-testid="search-command-bar">
+              <label className="command-label" htmlFor="series-search-input">
+                Search series
+              </label>
+              <input
+                id="series-search-input"
+                ref={searchInputRef}
+                className="command-input"
+                data-testid="search-command-input"
+                type="text"
+                value={shell.searchQuery}
+                onChange={(event) => onSearchQueryChange(event.target.value)}
+                placeholder="Type to filter series names"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <p className="command-help">
+                Esc closes search and restores the full list.
+                {shell.pendingAction === "search" ? " Searching..." : ""}
+              </p>
+            </div>
+          ) : null}
 
+          {shell.view === "series_list" && !isArchivedCollection && shell.interactionMode === "create_series" ? (
+            <div className="command-surface command-surface-global" data-testid="create-series-command-bar">
+              <label className="command-label" htmlFor="series-create-input">
+                Create a new series
+              </label>
+              <input
+                id="series-create-input"
+                ref={createSeriesInputRef}
+                className="command-input"
+                data-testid="create-series-command-input"
+                type="text"
+                value={shell.newSeriesNameDraft}
+                onChange={(event) => onNewSeriesNameDraftChange(event.target.value)}
+                placeholder="Series name"
+                autoComplete="off"
+                spellCheck={false}
+                disabled={shell.pendingAction === "create_series"}
+              />
+              <p className="command-help">
+                Enter creates the series. Esc cancels.
+                {shell.pendingAction === "create_series" ? " Creating..." : ""}
+              </p>
+            </div>
+          ) : null}
+
+          <div className="main-rail" data-testid="main-rail">
             {shell.seriesList.length === 0 ? (
               <div className="empty-state" data-testid="series-empty-state">
                 <h3>{isArchivedCollection ? "No archived series" : "No series yet"}</h3>
@@ -174,7 +190,7 @@ export function RememberShell({
                 </p>
               </div>
             ) : (
-              <ul className="series-list" aria-label="Series list">
+              <ul className="series-rail" aria-label="Series list" data-testid="series-rail">
                 {shell.seriesList.map((item) => {
                   const isSelected = item.id === shell.selectedSeriesId;
                   const isSilent = item.status === "silent";
@@ -183,7 +199,7 @@ export function RememberShell({
                   return (
                     <li
                       key={item.id}
-                      className={`series-row${isSelected ? " is-selected" : ""}${isSilent ? " is-silent" : ""}${isArchived ? " is-archived" : ""}`}
+                      className={`series-card${isSelected ? " is-selected" : ""}${isSilent ? " is-silent" : ""}${isArchived ? " is-archived" : ""}`}
                       data-testid={`series-row-${item.id}`}
                     >
                       <button
@@ -208,7 +224,6 @@ export function RememberShell({
                         </span>
                         <span className="series-excerpt">{item.latestExcerpt}</span>
                       </button>
-
                       {isSelected ? (
                         <button
                           type="button"
@@ -224,43 +239,45 @@ export function RememberShell({
                 })}
               </ul>
             )}
+          </div>
 
-            {!isArchivedCollection && shell.interactionMode === "draft_commit" ? (
-              <div className="command-surface command-surface-compose" data-testid="commit-draft-command-bar">
-                <label className="command-label" htmlFor="commit-draft-input">
-                  Append commit to {selectedSeries?.name ?? "the selected series"}
-                </label>
-                <input
-                  id="commit-draft-input"
-                  ref={commitInputRef}
-                  className="command-input"
-                  data-testid="commit-draft-command-input"
-                  type="text"
-                  value={shell.commitDraft}
-                  onChange={(event) => onCommitDraftChange(event.target.value)}
-                  placeholder="Type a commit and press Enter"
-                  autoComplete="off"
-                  spellCheck={false}
-                  disabled={shell.pendingAction === "append_commit"}
-                />
-                <p className="command-help">
-                  Enter submits the commit. Esc cancels.
-                  {shell.pendingAction === "append_commit" ? " Saving..." : ""}
-                </p>
-              </div>
-            ) : null}
-
-            {shell.pendingAction === "archive_series" ? (
-              <p className="command-status" data-testid="archive-pending-status">
-                Archiving the selected silent series...
+          {shell.view === "series_list" && !isArchivedCollection && shell.interactionMode === "draft_commit" ? (
+            <div className="command-surface command-surface-compose" data-testid="commit-draft-command-bar">
+              <label className="command-label" htmlFor="commit-draft-input">
+                Append commit to {selectedSeries?.name ?? "the selected series"}
+              </label>
+              <input
+                id="commit-draft-input"
+                ref={commitInputRef}
+                className="command-input"
+                data-testid="commit-draft-command-input"
+                type="text"
+                value={shell.commitDraft}
+                onChange={(event) => onCommitDraftChange(event.target.value)}
+                placeholder="Type a commit and press Enter"
+                autoComplete="off"
+                spellCheck={false}
+                disabled={shell.pendingAction === "append_commit"}
+              />
+              <p className="command-help">
+                Enter submits the commit. Esc cancels.
+                {shell.pendingAction === "append_commit" ? " Saving..." : ""}
               </p>
-            ) : null}
-          </article>
-        ) : (
-          <article className="panel stage-panel" data-testid="timeline-panel">
+            </div>
+          ) : null}
+
+          {shell.pendingAction === "archive_series" ? (
+            <p className="command-status" data-testid="archive-pending-status">
+              Archiving the selected silent series...
+            </p>
+          ) : null}
+        </article>
+
+        {shell.view === "timeline" ? (
+          <article className="panel stage-panel timeline-lane" data-testid="timeline-lane">
             <div className="panel-heading">
               <div>
-                <p className="panel-kicker">Level 2</p>
+                <p className="panel-kicker">Timeline Lane</p>
                 <div className="timeline-title-row">
                   <h2>{shell.activeTimelineSeries?.name ?? "Timeline"}</h2>
                   {timelineIsArchived ? (
@@ -326,114 +343,127 @@ export function RememberShell({
               </ol>
             ) : null}
           </article>
-        )}
+        ) : null}
       </section>
 
-      <section className="diagnostics-grid">
-        <section className="runtime-diagnostics panel" data-testid="runtime-diagnostics">
-          <h2>Runtime Mode</h2>
-          <div className="runtime-tags">
-            <span className="runtime-tag mode" data-testid="runtime-mode-badge">
-              mode: {shell.runtimeStatus.mode}
-            </span>
-            <span className="runtime-tag source" data-testid="runtime-source-badge">
-              source: {shell.runtimeStatus.source}
-            </span>
-            <span className="runtime-tag fallback" data-testid="runtime-fallback-badge">
-              fallback: {shell.runtimeStatus.usedFallback ? "on" : "off"}
-            </span>
-          </div>
-
-          {shell.runtimeStatus.warnings.length > 0 ? (
-            <div className="config-warning-banner" data-testid="config-warning-banner">
-              <strong>Config warning</strong>
-              <ul>
-                {shell.runtimeStatus.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
+      <aside
+        id="diagnostics-drawer-panel"
+        className={`diagnostics-drawer${isDiagnosticsDrawerOpen ? " is-open" : ""}`}
+        data-testid="diagnostics-drawer"
+        aria-hidden={!isDiagnosticsDrawerOpen}
+      >
+        <div className="diagnostics-drawer-header">
+          <h2>Runtime Diagnostics</h2>
+          <button type="button" className="back-button ghost" onClick={onToggleDiagnosticsDrawer}>
+            Close
+          </button>
+        </div>
+        <section className="diagnostics-grid">
+          <section className="runtime-diagnostics panel" data-testid="runtime-diagnostics">
+            <h2>Runtime Mode</h2>
+            <div className="runtime-tags">
+              <span className="runtime-tag mode" data-testid="runtime-mode-badge">
+                mode: {shell.runtimeStatus.mode}
+              </span>
+              <span className="runtime-tag source" data-testid="runtime-source-badge">
+                source: {shell.runtimeStatus.source}
+              </span>
+              <span className="runtime-tag fallback" data-testid="runtime-fallback-badge">
+                fallback: {shell.runtimeStatus.usedFallback ? "on" : "off"}
+              </span>
             </div>
-          ) : (
-            <p className="config-ok" data-testid="config-ok-banner">
-              No runtime warnings.
-            </p>
-          )}
-        </section>
 
-        <section className="command-diagnostics panel" data-testid="command-envelope-panel">
-          <h2>Command Envelope</h2>
-          <div className="runtime-tags">
-            <span className="runtime-tag mode" data-testid="command-envelope-path">
-              path: {shell.commandProbe.path}
-            </span>
-            <span className="runtime-tag source" data-testid="command-envelope-source">
-              source: {shell.commandProbe.source}
-            </span>
-            <span className="runtime-tag fallback" data-testid="command-envelope-ok">
-              ok: {shell.commandProbe.envelope.ok ? "true" : "false"}
-            </span>
-          </div>
-
-          {shell.commandProbe.envelope.ok ? (
-            <p className="config-ok" data-testid="command-envelope-success">
-              envelope success with data payload.
-            </p>
-          ) : (
-            <div className="config-warning-banner" data-testid="command-envelope-error">
-              <strong>Command error</strong>
-              <p data-testid="command-envelope-error-code">
-                code: {shell.commandProbe.envelope.error?.code ?? "UNKNOWN"}
+            {shell.runtimeStatus.warnings.length > 0 ? (
+              <div className="config-warning-banner" data-testid="config-warning-banner">
+                <strong>Config warning</strong>
+                <ul>
+                  {shell.runtimeStatus.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="config-ok" data-testid="config-ok-banner">
+                No runtime warnings.
               </p>
-              <p>{shell.commandProbe.envelope.error?.message ?? "No error message."}</p>
+            )}
+          </section>
+
+          <section className="command-diagnostics panel" data-testid="command-envelope-panel">
+            <h2>Command Envelope</h2>
+            <div className="runtime-tags">
+              <span className="runtime-tag mode" data-testid="command-envelope-path">
+                path: {shell.commandProbe.path}
+              </span>
+              <span className="runtime-tag source" data-testid="command-envelope-source">
+                source: {shell.commandProbe.source}
+              </span>
+              <span className="runtime-tag fallback" data-testid="command-envelope-ok">
+                ok: {shell.commandProbe.envelope.ok ? "true" : "false"}
+              </span>
             </div>
-          )}
 
-          <pre className="command-meta" data-testid="command-envelope-meta">
-            {JSON.stringify(shell.commandProbe.envelope.meta, null, 2)}
-          </pre>
-          <pre className="command-meta" data-testid="command-envelope-data">
-            {JSON.stringify(shell.commandProbe.envelope.data ?? null, null, 2)}
-          </pre>
-        </section>
+            {shell.commandProbe.envelope.ok ? (
+              <p className="config-ok" data-testid="command-envelope-success">
+                envelope success with data payload.
+              </p>
+            ) : (
+              <div className="config-warning-banner" data-testid="command-envelope-error">
+                <strong>Command error</strong>
+                <p data-testid="command-envelope-error-code">
+                  code: {shell.commandProbe.envelope.error?.code ?? "UNKNOWN"}
+                </p>
+                <p>{shell.commandProbe.envelope.error?.message ?? "No error message."}</p>
+              </div>
+            )}
 
-        <section className="startup-self-heal panel" data-testid="startup-self-heal-panel">
-          <h2>Startup Self-Heal</h2>
-          <div className="runtime-tags">
-            <span className="runtime-tag mode" data-testid="startup-self-heal-scanned">
-              scanned: {startupSelfHeal.scannedAlerts}
-            </span>
-            <span className="runtime-tag source" data-testid="startup-self-heal-repaired">
-              repaired: {startupSelfHeal.repairedAlerts}
-            </span>
-            <span className="runtime-tag fallback" data-testid="startup-self-heal-unresolved">
-              unresolved: {startupSelfHeal.unresolvedAlerts}
-            </span>
-            <span className="runtime-tag fallback" data-testid="startup-self-heal-failed">
-              failed: {startupSelfHeal.failedAlerts}
-            </span>
-          </div>
-          <p data-testid="startup-self-heal-completed-at">
-            completed at: {startupSelfHeal.completedAt}
-          </p>
+            <pre className="command-meta" data-testid="command-envelope-meta">
+              {JSON.stringify(shell.commandProbe.envelope.meta, null, 2)}
+            </pre>
+            <pre className="command-meta" data-testid="command-envelope-data">
+              {JSON.stringify(shell.commandProbe.envelope.data ?? null, null, 2)}
+            </pre>
+          </section>
 
-          {startupSelfHeal.unresolvedAlerts > 0 && startupSelfHeal.messages.length > 0 ? (
-            <div className="config-warning-banner" data-testid="startup-self-heal-messages">
-              <strong>Unresolved startup alerts</strong>
-              <ul>
-                {startupSelfHeal.messages.map((message) => (
-                  <li key={message}>{message}</li>
-                ))}
-              </ul>
+          <section className="startup-self-heal panel" data-testid="startup-self-heal-panel">
+            <h2>Startup Self-Heal</h2>
+            <div className="runtime-tags">
+              <span className="runtime-tag mode" data-testid="startup-self-heal-scanned">
+                scanned: {startupSelfHeal.scannedAlerts}
+              </span>
+              <span className="runtime-tag source" data-testid="startup-self-heal-repaired">
+                repaired: {startupSelfHeal.repairedAlerts}
+              </span>
+              <span className="runtime-tag fallback" data-testid="startup-self-heal-unresolved">
+                unresolved: {startupSelfHeal.unresolvedAlerts}
+              </span>
+              <span className="runtime-tag fallback" data-testid="startup-self-heal-failed">
+                failed: {startupSelfHeal.failedAlerts}
+              </span>
             </div>
-          ) : (
-            <p className="config-ok" data-testid="startup-self-heal-clean">
-              No unresolved startup alerts.
+            <p data-testid="startup-self-heal-completed-at">
+              completed at: {startupSelfHeal.completedAt}
             </p>
-          )}
-        </section>
-      </section>
 
-      {shell.view === "series_list" && selectedSeries !== null ? (
+            {startupSelfHeal.unresolvedAlerts > 0 && startupSelfHeal.messages.length > 0 ? (
+              <div className="config-warning-banner" data-testid="startup-self-heal-messages">
+                <strong>Unresolved startup alerts</strong>
+                <ul>
+                  {startupSelfHeal.messages.map((message) => (
+                    <li key={message}>{message}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="config-ok" data-testid="startup-self-heal-clean">
+                No unresolved startup alerts.
+              </p>
+            )}
+          </section>
+        </section>
+      </aside>
+
+      {selectedSeries !== null ? (
         <p className="selection-footer" data-testid="selection-footer">
           Selected {isArchivedCollection ? "archived" : "active"} series: {selectedSeries.name}
         </p>

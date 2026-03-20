@@ -29,9 +29,9 @@ button {
 
 .remember-shell {
   margin: 0 auto;
-  max-width: 1080px;
+  max-width: 1200px;
   min-height: 100vh;
-  padding: 32px 20px 40px;
+  padding: 28px 20px 40px;
 }
 
 .remember-shell-loading {
@@ -44,8 +44,15 @@ button {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
   margin-bottom: 20px;
+}
+
+.shell-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
 }
 
 .shell-kicker,
@@ -66,6 +73,22 @@ button {
 .shell-header p {
   margin: 8px 0 0;
   color: #57534e;
+}
+
+.diagnostics-toggle-button {
+  border: 1px solid #fdba74;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #9a3412;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 14px;
+}
+
+.diagnostics-toggle-button:hover,
+.diagnostics-toggle-button:focus-visible {
+  outline: none;
+  background: #ffedd5;
 }
 
 .layer-tags {
@@ -91,10 +114,6 @@ button {
   margin-bottom: 18px;
 }
 
-.stage-panel {
-  min-height: 420px;
-}
-
 .panel {
   border: 1px solid rgba(251, 191, 36, 0.2);
   border-radius: 22px;
@@ -104,9 +123,24 @@ button {
   backdrop-filter: blur(12px);
 }
 
+.stage-panel {
+  min-height: 280px;
+}
+
 .panel h2 {
   margin: 0;
   font-size: 1.2rem;
+}
+
+.cross-axis-stage {
+  display: grid;
+  gap: 16px;
+}
+
+.cross-axis-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .panel-heading {
@@ -114,7 +148,6 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
 }
 
 .list-heading-actions {
@@ -126,7 +159,7 @@ button {
 
 .panel-hint {
   margin: 0;
-  max-width: 360px;
+  max-width: 380px;
   color: #78716c;
   text-align: right;
   font-size: 0.92rem;
@@ -146,7 +179,7 @@ button {
 }
 
 .timeline-hint {
-  max-width: 240px;
+  max-width: 260px;
 }
 
 .collection-toggle {
@@ -185,28 +218,84 @@ button {
   background: #92400e;
 }
 
-.series-list,
-.timeline-list {
+.command-surface {
+  border: 1px solid #fdba74;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.96), rgba(255, 255, 255, 0.92));
+  padding: 14px;
+}
+
+.command-surface-global {
+  margin: 0;
+}
+
+.command-surface-compose {
+  margin: 0;
+}
+
+.command-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #9a3412;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.command-input {
+  width: 100%;
+  border: 1px solid #fdba74;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #1c1917;
+  padding: 11px 12px;
+}
+
+.command-input:focus-visible {
+  outline: 2px solid rgba(245, 158, 11, 0.35);
+  outline-offset: 2px;
+}
+
+.command-input:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.command-help,
+.command-status {
+  margin: 8px 0 0;
+  color: #78716c;
+  font-size: 0.9rem;
+}
+
+.main-rail {
+  border: 1px solid #fde68a;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #fffbeb 0%, #fff 80%);
+  padding: 14px;
+  overflow-x: auto;
+}
+
+.series-rail {
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.series-list {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 12px;
+  min-height: 180px;
 }
 
-.series-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: stretch;
+.series-card {
+  width: 280px;
+  min-width: 280px;
   border: 1px solid #e7e5e4;
   border-radius: 18px;
   background: #fffdf8;
   padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: space-between;
   transition:
     transform 140ms ease,
     border-color 140ms ease,
@@ -214,38 +303,38 @@ button {
     background-color 140ms ease;
 }
 
-.series-row.is-selected {
+.series-card.is-selected {
   border-color: #f59e0b;
   background: linear-gradient(135deg, #fff7ed 0%, #fffbeb 100%);
   box-shadow: 0 14px 28px rgba(245, 158, 11, 0.14);
   transform: translateY(-1px);
 }
 
-.series-row.is-silent {
+.series-card.is-silent {
   border-color: #d6d3d1;
   background: linear-gradient(135deg, #fafaf9 0%, #f5f5f4 100%);
 }
 
-.series-row.is-silent .series-select-button {
+.series-card.is-silent .series-select-button {
   opacity: 0.78;
 }
 
-.series-row.is-silent.is-selected {
+.series-card.is-silent.is-selected {
   border-color: #a8a29e;
   background: linear-gradient(135deg, #f5f5f4 0%, #e7e5e4 100%);
   box-shadow: 0 14px 28px rgba(87, 83, 78, 0.14);
 }
 
-.series-row.is-archived {
+.series-card.is-archived {
   border-color: #cbd5e1;
   background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
 }
 
-.series-row.is-archived .series-select-button {
+.series-card.is-archived .series-select-button {
   opacity: 0.88;
 }
 
-.series-row.is-archived.is-selected {
+.series-card.is-archived.is-selected {
   border-color: #60a5fa;
   background: linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%);
   box-shadow: 0 14px 28px rgba(59, 130, 246, 0.14);
@@ -317,7 +406,7 @@ button {
 
 .series-open-button,
 .back-button {
-  align-self: center;
+  align-self: flex-start;
   border-radius: 999px;
   padding: 10px 14px;
   background: #b45309;
@@ -339,7 +428,16 @@ button {
   border: 1px solid #fdba74;
 }
 
+.timeline-lane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .timeline-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -370,55 +468,9 @@ button {
   margin-top: 12px;
 }
 
-.command-surface {
-  margin: 14px 0;
-  border: 1px solid #fdba74;
-  border-radius: 18px;
-  background: linear-gradient(135deg, rgba(255, 247, 237, 0.96), rgba(255, 255, 255, 0.92));
-  padding: 14px;
-}
-
-.command-surface-compose {
-  margin-top: 18px;
-}
-
-.command-label {
-  display: block;
-  margin-bottom: 8px;
-  color: #9a3412;
-  font-size: 0.92rem;
-  font-weight: 700;
-}
-
-.command-input {
-  width: 100%;
-  border: 1px solid #fdba74;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.95);
-  color: #1c1917;
-  padding: 11px 12px;
-}
-
-.command-input:focus-visible {
-  outline: 2px solid rgba(245, 158, 11, 0.35);
-  outline-offset: 2px;
-}
-
-.command-input:disabled {
-  cursor: progress;
-  opacity: 0.7;
-}
-
-.command-help,
-.command-status {
-  margin: 8px 0 0;
-  color: #78716c;
-  font-size: 0.9rem;
-}
-
 .empty-state {
   display: flex;
-  min-height: 220px;
+  min-height: 180px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -440,10 +492,46 @@ button {
   color: #57534e;
 }
 
+.diagnostics-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(560px, 90vw);
+  height: 100vh;
+  padding: 18px;
+  background: rgba(248, 250, 252, 0.98);
+  border-left: 1px solid #e2e8f0;
+  box-shadow: -18px 0 40px rgba(15, 23, 42, 0.1);
+  transform: translateX(105%);
+  transition: transform 180ms ease;
+  overflow-y: auto;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.diagnostics-drawer.is-open {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.diagnostics-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.diagnostics-drawer-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.1rem;
+}
+
 .diagnostics-grid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .runtime-diagnostics,
@@ -488,7 +576,7 @@ button {
 }
 
 .interaction-feedback {
-  margin-top: 12px;
+  margin-top: 2px;
 }
 
 .config-warning-banner p,
@@ -529,8 +617,13 @@ button {
 }
 
 @media (max-width: 920px) {
-  .diagnostics-grid {
-    grid-template-columns: 1fr;
+  .remember-shell {
+    padding-right: 16px;
+  }
+
+  .series-card {
+    width: 240px;
+    min-width: 240px;
   }
 }
 
@@ -540,11 +633,18 @@ button {
   }
 
   .shell-header,
-  .panel-heading,
-  .series-row {
-    grid-template-columns: 1fr;
-    display: flex;
+  .panel-heading {
     flex-direction: column;
+  }
+
+  .shell-header-actions {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .diagnostics-toggle-button {
+    width: 100%;
+    text-align: center;
   }
 
   .layer-tags {
@@ -556,12 +656,14 @@ button {
     text-align: left;
   }
 
-  .timeline-heading-actions {
+  .timeline-heading-actions,
+  .list-heading-actions {
     align-items: stretch;
   }
 
-  .list-heading-actions {
-    align-items: stretch;
+  .series-card {
+    width: 86vw;
+    min-width: 86vw;
   }
 
   .series-open-button,
@@ -583,5 +685,10 @@ button {
 
   .collection-toggle-button {
     flex: 1 1 0;
+  }
+
+  .diagnostics-drawer {
+    width: 100vw;
+    padding: 14px;
   }
 }

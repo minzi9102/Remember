@@ -84,10 +84,12 @@ function buildShell(overrides?: Partial<ShellState>): ShellState {
 
 const noop = () => undefined;
 
-function renderShellMarkup(shell: ShellState) {
+function renderShellMarkup(shell: ShellState, options?: { drawerOpen?: boolean }) {
   return renderToStaticMarkup(
     <RememberShell
       shell={shell}
+      isDiagnosticsDrawerOpen={options?.drawerOpen === true}
+      onToggleDiagnosticsDrawer={noop}
       onSelectCollection={noop}
       onSelectSeries={noop}
       onOpenTimeline={noop}
@@ -107,6 +109,11 @@ describe("RememberShell sqlite-only views", () => {
     expect(markup).toContain("Series");
     expect(markup).toContain("Inbox");
     expect(markup).toContain("Silent");
+    expect(markup).toContain("data-testid=\"main-rail\"");
+    expect(markup).toContain("data-testid=\"series-rail\"");
+    expect(markup).toContain("data-testid=\"diagnostics-drawer-toggle\"");
+    expect(markup).toContain("aria-controls=\"diagnostics-drawer-panel\"");
+    expect(markup).toContain("aria-expanded=\"false\"");
     expect(markup).toContain("Startup Self-Heal");
     expect(markup).toContain("No unresolved startup alerts.");
   });
@@ -145,6 +152,14 @@ describe("RememberShell sqlite-only views", () => {
     expect(markup).toContain("unresolved: 1");
     expect(markup).toContain("failed: 1");
     expect(markup).toContain("alert `a` remains unresolved");
+  });
+
+  it("opens the diagnostics drawer with disclosure semantics", () => {
+    const markup = renderShellMarkup(buildShell(), { drawerOpen: true });
+
+    expect(markup).toContain("diagnostics-drawer is-open");
+    expect(markup).toContain("aria-expanded=\"true\"");
+    expect(markup).toContain("aria-hidden=\"false\"");
   });
 
   it("renders timeline and archived states as read-only", () => {
@@ -191,6 +206,7 @@ describe("RememberShell sqlite-only views", () => {
     );
 
     expect(timelineMarkup).toContain("Read-only timeline");
+    expect(timelineMarkup).toContain("data-testid=\"timeline-lane\"");
     expect(timelineMarkup).toContain("first-note");
     expect(archivedMarkup).toContain("Archived Series");
     expect(archivedMarkup).toContain("Archived series stay read-only.");
