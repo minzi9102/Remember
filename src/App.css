@@ -4,9 +4,7 @@
   line-height: 1.5;
   font-weight: 400;
   color: #1f2937;
-  background:
-    radial-gradient(circle at top left, rgba(249, 168, 37, 0.14), transparent 24%),
-    linear-gradient(180deg, #fffaf1 0%, #f7f7f2 48%, #eff6ff 100%);
+  background: transparent;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -23,6 +21,14 @@ body {
   margin: 0;
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  background: transparent;
+}
+
 button {
   font: inherit;
 }
@@ -32,6 +38,7 @@ button {
   max-width: 1200px;
   min-height: 100vh;
   padding: 28px 20px 40px;
+  background: transparent;
 }
 
 .remember-shell-loading {
