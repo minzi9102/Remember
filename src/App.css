@@ -58,7 +58,7 @@ button {
   z-index: 20;
   width: 100%;
   margin: 0;
-  padding: calc(24px + env(safe-area-inset-top)) 16px 24px;
+  padding: calc(78px + env(safe-area-inset-top)) 16px 24px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   background: #fafafa;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
@@ -67,6 +67,49 @@ button {
 
 .main-rail-wrapper {
   margin-top: 0;
+}
+
+.top-edge-controls {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding:
+    calc(10px + env(safe-area-inset-top))
+    calc(16px + env(safe-area-inset-right))
+    10px
+    calc(16px + env(safe-area-inset-left));
+  background: rgba(250, 250, 250, 0.92);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.top-edge-title {
+  margin: 0;
+  min-width: 0;
+  color: #9a3412;
+  font-size: 1.65rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.top-edge-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-width: max-content;
 }
 
 .top-dock-header {
@@ -194,23 +237,6 @@ button {
   color: #9a3412;
   font-size: 12px;
   padding: 4px 10px;
-}
-
-.floating-corner-controls {
-  position: fixed;
-  top: calc(12px + env(safe-area-inset-top));
-  right: calc(12px + env(safe-area-inset-right));
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-  pointer-events: none;
-}
-
-.floating-corner-controls .diagnostics-toggle-button,
-.floating-corner-controls .view-toggle-container {
-  pointer-events: auto;
 }
 
 .view-toggle-container {
@@ -772,8 +798,21 @@ button {
 
 @media (max-width: 920px) {
   .top-dock {
+    padding-top: calc(72px + env(safe-area-inset-top));
     padding-left: 16px;
     padding-right: 16px;
+  }
+
+  .top-edge-controls {
+    padding:
+      calc(10px + env(safe-area-inset-top))
+      calc(14px + env(safe-area-inset-right))
+      9px
+      calc(14px + env(safe-area-inset-left));
+  }
+
+  .top-edge-title {
+    font-size: 1.42rem;
   }
 
   .workspace-stage {
@@ -788,6 +827,28 @@ button {
 }
 
 @media (max-width: 760px) {
+  .top-dock {
+    padding-top: calc(66px + env(safe-area-inset-top));
+  }
+
+  .top-edge-controls {
+    gap: 8px;
+    padding:
+      calc(8px + env(safe-area-inset-top))
+      calc(10px + env(safe-area-inset-right))
+      8px
+      calc(10px + env(safe-area-inset-left));
+  }
+
+  .top-edge-title {
+    font-size: 1.16rem;
+    max-width: 34vw;
+  }
+
+  .top-edge-actions {
+    gap: 6px;
+  }
+
   .panel-heading {
     flex-direction: column;
   }
@@ -818,9 +879,9 @@ button {
     flex-direction: column;
   }
 
-  .floating-corner-controls {
-    top: calc(10px + env(safe-area-inset-top));
-    right: calc(10px + env(safe-area-inset-right));
+  .top-edge-actions .diagnostics-toggle-button {
+    padding: 5px 10px;
+    font-size: 0.68rem;
   }
 
   .view-toggle-container .collection-toggle {

@@ -110,6 +110,46 @@ export function RememberShell({
   return (
     <main className="remember-shell" data-testid="remember-shell">
       <section className="top-dock main-rail-wrapper" data-testid="top-dock">
+        <div className="top-edge-controls" data-testid="top-edge-controls">
+          <h1 className="top-edge-title" data-testid="top-edge-title">
+            {shell.appTitle || "Remember"}
+          </h1>
+          <div className="top-edge-actions" data-testid="top-edge-actions">
+            <button
+              type="button"
+              className="diagnostics-toggle-button diagnostics-toggle-button-mini"
+              data-testid="diagnostics-drawer-toggle"
+              aria-expanded={isDiagnosticsDrawerOpen}
+              aria-controls="diagnostics-drawer-panel"
+              onClick={onToggleDiagnosticsDrawer}
+            >
+              Diag
+            </button>
+            <div className="view-toggle-container" data-testid="view-toggle-container">
+              <div className="collection-toggle" data-testid="series-collection-toggle">
+                <button
+                  type="button"
+                  className={`collection-toggle-button${!isArchivedCollection ? " is-active" : ""}`}
+                  data-testid="series-collection-active-button"
+                  aria-pressed={!isArchivedCollection}
+                  onClick={() => onSelectCollection("active")}
+                >
+                  Active
+                </button>
+                <button
+                  type="button"
+                  className={`collection-toggle-button${isArchivedCollection ? " is-active" : ""}`}
+                  data-testid="series-collection-archived-button"
+                  aria-pressed={isArchivedCollection}
+                  onClick={() => onSelectCollection("archived")}
+                >
+                  Archived
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <article className="panel stage-panel cross-axis-main top-dock-panel" data-testid="series-list-panel">
           {shell.navigationError !== null ? (
             <div className="config-warning-banner" data-testid="series-list-error">
@@ -351,41 +391,6 @@ export function RememberShell({
           </article>
         ) : null}
       </section>
-
-      <div className="floating-corner-controls" data-testid="floating-corner-controls">
-        <button
-          type="button"
-          className="diagnostics-toggle-button diagnostics-toggle-button-mini"
-          data-testid="diagnostics-drawer-toggle"
-          aria-expanded={isDiagnosticsDrawerOpen}
-          aria-controls="diagnostics-drawer-panel"
-          onClick={onToggleDiagnosticsDrawer}
-        >
-          Diag
-        </button>
-        <div className="view-toggle-container" data-testid="view-toggle-container">
-          <div className="collection-toggle" data-testid="series-collection-toggle">
-            <button
-              type="button"
-              className={`collection-toggle-button${!isArchivedCollection ? " is-active" : ""}`}
-              data-testid="series-collection-active-button"
-              aria-pressed={!isArchivedCollection}
-              onClick={() => onSelectCollection("active")}
-            >
-              Active
-            </button>
-            <button
-              type="button"
-              className={`collection-toggle-button${isArchivedCollection ? " is-active" : ""}`}
-              data-testid="series-collection-archived-button"
-              aria-pressed={isArchivedCollection}
-              onClick={() => onSelectCollection("archived")}
-            >
-              Archived
-            </button>
-          </div>
-        </div>
-      </div>
 
       <p className="shortcut-hints-watermark" data-testid="shortcut-hints-watermark">
         {listHint}

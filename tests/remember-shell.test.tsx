@@ -112,7 +112,9 @@ describe("RememberShell sqlite-only views", () => {
     expect(markup).toContain("data-testid=\"top-dock\"");
     expect(markup).toContain("data-testid=\"main-rail\"");
     expect(markup).toContain("data-testid=\"series-rail\"");
-    expect(markup).toContain("data-testid=\"floating-corner-controls\"");
+    expect(markup).toContain("data-testid=\"top-edge-controls\"");
+    expect(markup).toContain("data-testid=\"top-edge-title\"");
+    expect(markup).toContain("Remember");
     expect(markup).toContain("data-testid=\"view-toggle-container\"");
     expect(markup).toContain("data-testid=\"shortcut-hints-watermark\"");
     expect(markup).toContain("data-testid=\"workspace-glass-placeholder\"");
@@ -124,6 +126,7 @@ describe("RememberShell sqlite-only views", () => {
     expect(markup).not.toContain("Main Rail");
     expect(markup).not.toContain("Active Series");
     expect(markup).not.toContain("data-testid=\"selection-footer\"");
+    expect(markup).not.toContain("data-testid=\"floating-corner-controls\"");
     expect(markup).toContain("Startup Self-Heal");
     expect(markup).toContain("No unresolved startup alerts.");
   });
