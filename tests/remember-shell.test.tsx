@@ -110,6 +110,7 @@ describe("RememberShell sqlite-only views", () => {
     expect(markup).toContain("Inbox");
     expect(markup).toContain("Silent");
     expect(markup).toContain("data-testid=\"top-dock\"");
+    expect(markup).toContain("data-testid=\"workspace-stage\"");
     expect(markup).toContain("data-testid=\"main-rail\"");
     expect(markup).toContain("data-testid=\"series-rail\"");
     expect(markup).toContain("data-testid=\"workspace-glass-placeholder\"");
