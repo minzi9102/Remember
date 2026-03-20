@@ -108,9 +108,7 @@ export function interpretShellKeyboardEvent(
         ? { type: "move_selection", direction: "down" }
         : NOOP_INTENT;
     case "ArrowRight":
-      return shell.selectedSeriesId === null
-        ? buildBlockedIntent("NO_SERIES_SELECTED", "select a series before opening the timeline")
-        : { type: "open_timeline" };
+      return NOOP_INTENT;
     case "/":
       return { type: "open_search" };
     default:

@@ -27,6 +27,7 @@ export type ShellAction =
   | {
       type: "timeline.requested";
       seriesId: string;
+      presentation: "preview" | "focus";
     }
   | {
       type: "timeline.loaded";
@@ -187,6 +188,20 @@ export function shellReducer(state: ShellState, action: ShellAction): ShellState
         return state;
       }
 
+      if (action.presentation === "preview") {
+        return {
+          ...state,
+          view: "series_list",
+          selectedSeriesId: series.id,
+          ...applyCollectionSelection(state, state.seriesCollection, series.id),
+          activeTimelineSeries: series,
+          timelineLoadState: "loading",
+          timelineItems: [],
+          navigationError: null,
+          interactionFeedback: null,
+        };
+      }
+
       return {
         ...state,
         view: "timeline",
@@ -210,7 +225,6 @@ export function shellReducer(state: ShellState, action: ShellAction): ShellState
 
       return {
         ...state,
-        view: "timeline",
         timelineLoadState: "ready",
         timelineItems: action.items,
         navigationError: null,
@@ -223,7 +237,6 @@ export function shellReducer(state: ShellState, action: ShellAction): ShellState
 
       return {
         ...state,
-        view: "timeline",
         timelineLoadState: "error",
         timelineItems: [],
         navigationError: action.error,

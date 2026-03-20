@@ -110,15 +110,13 @@ describe("shell keyboard shortcuts", () => {
     });
   });
 
-  it("opens the timeline from the series list", () => {
+  it("ignores ArrowRight in the series list", () => {
     const intent = interpretShellKeyboardEvent(
       buildShell(),
       buildKeyboardEvent({ key: "ArrowRight" }),
     );
 
-    expect(intent).toEqual({
-      type: "open_timeline",
-    });
+    expect(intent).toEqual({ type: "noop" });
   });
 
   it("closes an input mode before changing views", () => {
@@ -169,7 +167,7 @@ describe("shell keyboard shortcuts", () => {
     });
   });
 
-  it("allows search and timeline open in the archived collection", () => {
+  it("allows search and ignores ArrowRight in the archived collection", () => {
     expect(
       interpretShellKeyboardEvent(
         buildShell({
@@ -212,7 +210,7 @@ describe("shell keyboard shortcuts", () => {
         }),
         buildKeyboardEvent({ key: "ArrowRight" }),
       ),
-    ).toEqual({ type: "open_timeline" });
+    ).toEqual({ type: "noop" });
   });
 
   it("submits create series from create mode", () => {

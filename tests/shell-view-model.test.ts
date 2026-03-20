@@ -93,6 +93,7 @@ describe("shell view model", () => {
     const opening = shellReducer(selected, {
       type: "timeline.requested",
       seriesId: "series-project-a",
+      presentation: "focus",
     });
     const loaded = shellReducer(opening, {
       type: "timeline.loaded",
@@ -139,6 +140,7 @@ describe("shell view model", () => {
     const opening = shellReducer(initial, {
       type: "timeline.requested",
       seriesId: "series-inbox",
+      presentation: "focus",
     });
     const failed = shellReducer(opening, {
       type: "timeline.failed",
@@ -151,6 +153,7 @@ describe("shell view model", () => {
     const retry = shellReducer(failed, {
       type: "timeline.requested",
       seriesId: "series-inbox",
+      presentation: "focus",
     });
 
     expect(failed.timelineLoadState).toBe("error");
@@ -290,6 +293,7 @@ describe("shell view model", () => {
     const opening = shellReducer(archivedList, {
       type: "timeline.requested",
       seriesId: "series-archive",
+      presentation: "focus",
     });
     const loaded = shellReducer(opening, {
       type: "timeline.loaded",
@@ -324,5 +328,32 @@ describe("shell view model", () => {
       code: "INTERNAL_ERROR",
       message: "failed to refresh silent series status",
     });
+  });
+
+  it("keeps list view while requesting timeline preview", () => {
+    const initial = buildInitialShellState(buildSnapshot(), buildSeriesList(), null);
+    const previewRequested = shellReducer(initial, {
+      type: "timeline.requested",
+      seriesId: "series-inbox",
+      presentation: "preview",
+    });
+    const previewLoaded = shellReducer(previewRequested, {
+      type: "timeline.loaded",
+      seriesId: "series-inbox",
+      items: [
+        {
+          id: "commit-1",
+          seriesId: "series-inbox",
+          content: "first-note",
+          createdAt: "2026-03-16T00:00:00Z",
+        },
+      ],
+    });
+
+    expect(previewRequested.view).toBe("series_list");
+    expect(previewRequested.timelineLoadState).toBe("loading");
+    expect(previewLoaded.view).toBe("series_list");
+    expect(previewLoaded.timelineLoadState).toBe("ready");
+    expect(previewLoaded.activeTimelineSeries?.id).toBe("series-inbox");
   });
 });

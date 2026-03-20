@@ -121,6 +121,7 @@ describe("RememberShell sqlite-only views", () => {
     expect(markup).toContain("data-testid=\"diagnostics-drawer-toggle\"");
     expect(markup).toContain("aria-controls=\"diagnostics-drawer-panel\"");
     expect(markup).toContain("aria-expanded=\"false\"");
+    expect(markup).not.toContain("View timeline");
     expect(markup).not.toContain("Low-friction capture");
     expect(markup).not.toContain("UI: ready");
     expect(markup).not.toContain("Main Rail");
@@ -129,6 +130,36 @@ describe("RememberShell sqlite-only views", () => {
     expect(markup).not.toContain("data-testid=\"floating-corner-controls\"");
     expect(markup).toContain("Startup Self-Heal");
     expect(markup).toContain("No unresolved startup alerts.");
+  });
+
+  it("renders timeline preview lane in series list without back button", () => {
+    const markup = renderShellMarkup(
+      buildShell({
+        view: "series_list",
+        activeTimelineSeries: {
+          id: "series-inbox",
+          name: "Inbox",
+          status: "active",
+          lastUpdatedAt: "2026-03-16T00:00:00Z",
+          latestExcerpt: "first-note",
+          createdAt: "2026-03-15T00:00:00Z",
+        },
+        timelineLoadState: "ready",
+        timelineItems: [
+          {
+            id: "commit-1",
+            seriesId: "series-inbox",
+            content: "first-note",
+            createdAt: "2026-03-16T00:00:00Z",
+          },
+        ],
+      }),
+    );
+
+    expect(markup).toContain("data-testid=\"timeline-lane\"");
+    expect(markup).toContain("Timeline preview. Double-click a card to focus.");
+    expect(markup).toContain("first-note");
+    expect(markup).not.toContain("data-testid=\"timeline-back-button\"");
   });
 
   it("renders unresolved startup self-heal messages", () => {

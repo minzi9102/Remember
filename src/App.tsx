@@ -42,6 +42,8 @@ function App() {
   const createSeriesInputRef = useRef<HTMLInputElement | null>(null);
   const commitInputRef = useRef<HTMLInputElement | null>(null);
   const latestSearchRequestIdRef = useRef(0);
+  const latestTimelineRequestIdRef = useRef(0);
+  const latestPreviewKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -235,34 +237,86 @@ function App() {
     });
   });
 
-  const handleOpenTimeline = useEffectEvent(async (seriesId: string) => {
-    startTransition(() => {
-      dispatch({ type: "timeline.requested", seriesId });
-    });
+  const handleOpenTimeline = useEffectEvent(
+    async (seriesId: string, presentation: "preview" | "focus") => {
+      const requestId = latestTimelineRequestIdRef.current + 1;
+      latestTimelineRequestIdRef.current = requestId;
 
-    const envelope = await loadTimeline(seriesId, buildDefaultTimelineRequest());
+      startTransition(() => {
+        dispatch({ type: "timeline.requested", seriesId, presentation });
+      });
 
-    if (!envelope.ok || envelope.data === undefined) {
+      const envelope = await loadTimeline(seriesId, buildDefaultTimelineRequest());
+
+      if (requestId !== latestTimelineRequestIdRef.current) {
+        return;
+      }
+
+      if (!envelope.ok || envelope.data === undefined) {
+        startTransition(() => {
+          dispatch({
+            type: "timeline.failed",
+            seriesId,
+            error: resolveRpcError(envelope.error, `failed to load timeline for series \`${seriesId}\``),
+          });
+        });
+        return;
+      }
+
+      const timelineItems = envelope.data.items;
+
       startTransition(() => {
         dispatch({
-          type: "timeline.failed",
+          type: "timeline.loaded",
           seriesId,
-          error: resolveRpcError(envelope.error, `failed to load timeline for series \`${seriesId}\``),
+          items: timelineItems,
         });
       });
+    },
+  );
+
+  useEffect(() => {
+    if (shell === null) {
       return;
     }
 
-    const timelineItems = envelope.data.items;
+    if (shell.view !== "series_list") {
+      latestPreviewKeyRef.current = null;
+      return;
+    }
 
-    startTransition(() => {
-      dispatch({
-        type: "timeline.loaded",
-        seriesId,
-        items: timelineItems,
-      });
-    });
-  });
+    if (shell.selectedSeriesId === null) {
+      latestPreviewKeyRef.current = null;
+      return;
+    }
+
+    const selectedSeries =
+      shell.seriesList.find((item) => item.id === shell.selectedSeriesId) ?? null;
+    if (selectedSeries === null) {
+      latestPreviewKeyRef.current = null;
+      return;
+    }
+
+    const previewKey = `${shell.seriesCollection}:${selectedSeries.id}:${selectedSeries.lastUpdatedAt}`;
+    if (
+      latestPreviewKeyRef.current === previewKey &&
+      shell.activeTimelineSeries?.id === selectedSeries.id &&
+      shell.timelineLoadState !== "idle"
+    ) {
+      return;
+    }
+
+    latestPreviewKeyRef.current = previewKey;
+    void handleOpenTimeline(selectedSeries.id, "preview");
+  }, [
+    shell?.activeTimelineSeries?.id,
+    shell?.seriesCollection,
+    shell?.selectedSeriesId,
+    shell?.seriesList,
+    shell?.timelineLoadState,
+    shell?.view,
+    handleOpenTimeline,
+  ]);
 
   const submitCreateSeries = useEffectEvent(async () => {
     if (shell === null) {
@@ -537,7 +591,7 @@ function App() {
         return;
       case "open_timeline":
         if (shell.selectedSeriesId !== null) {
-          void handleOpenTimeline(shell.selectedSeriesId);
+          void handleOpenTimeline(shell.selectedSeriesId, "focus");
         }
         return;
       case "close_timeline":
@@ -616,7 +670,7 @@ function App() {
         });
       }}
       onOpenTimeline={(seriesId) => {
-        void handleOpenTimeline(seriesId);
+        void handleOpenTimeline(seriesId, "focus");
       }}
       onBackToList={() => {
         startTransition(() => {
@@ -626,7 +680,7 @@ function App() {
       onRetryTimeline={() => {
         const activeSeriesId = shell.activeTimelineSeries?.id;
         if (activeSeriesId !== undefined) {
-          void handleOpenTimeline(activeSeriesId);
+          void handleOpenTimeline(activeSeriesId, "focus");
         }
       }}
       onSearchQueryChange={(query) => {

@@ -51,9 +51,14 @@ export function RememberShell({
   const selectedSeries = findSeriesById(shell.seriesList, shell.selectedSeriesId);
   const isArchivedCollection = shell.seriesCollection === "archived";
   const timelineIsArchived = shell.activeTimelineSeries?.status === "archived";
+  const isTimelinePreview =
+    shell.view === "series_list" &&
+    shell.selectedSeriesId !== null &&
+    shell.activeTimelineSeries !== null;
+  const showTimelineLane = shell.view === "timeline" || isTimelinePreview;
   const listHint = isArchivedCollection
-    ? "`↑/↓` select, `→` opens timeline, `/` searches. Archived series stay read-only."
-    : "`↑/↓` select, `→` opens timeline, `/` searches, `Shift+N` creates, `a` archives silent, type to capture.";
+    ? "`↑/↓` select, double-click opens focused timeline, `/` searches. Archived series stay read-only."
+    : "`↑/↓` select, double-click opens focused timeline, `/` searches, `Shift+N` creates, `a` archives silent, type to capture.";
   const selectedSeriesCardRef = useRef<HTMLLIElement | null>(null);
   const mainRailRef = useRef<HTMLDivElement | null>(null);
 
@@ -260,16 +265,6 @@ export function RememberShell({
                         </span>
                         <span className="series-excerpt">{item.latestExcerpt}</span>
                       </button>
-                      {isSelected ? (
-                        <button
-                          type="button"
-                          className="series-open-button"
-                          data-testid={`series-open-${item.id}`}
-                          onClick={() => onOpenTimeline(item.id)}
-                        >
-                          View timeline
-                        </button>
-                      ) : null}
                     </li>
                   );
                 })}
@@ -311,7 +306,7 @@ export function RememberShell({
       </section>
 
       <section className="workspace-stage cross-axis-stage" data-testid="workspace-stage">
-        {shell.view === "series_list" ? (
+        {!showTimelineLane ? (
           <article
             className="workspace-glass-placeholder"
             data-testid="workspace-glass-placeholder"
@@ -319,7 +314,7 @@ export function RememberShell({
           />
         ) : null}
 
-        {shell.view === "timeline" ? (
+        {showTimelineLane ? (
           <article className="panel stage-panel timeline-lane" data-testid="timeline-lane">
             <div className="panel-heading">
               <div>
@@ -335,18 +330,24 @@ export function RememberShell({
               </div>
               <div className="timeline-heading-actions">
                 <p className="panel-hint timeline-hint">
-                  {timelineIsArchived
-                    ? "Archived timeline is read-only. `←` or `Esc` returns."
-                    : "Read-only timeline. `←` or `Esc` returns."}
+                  {isTimelinePreview
+                    ? timelineIsArchived
+                      ? "Archived timeline preview is read-only. Double-click a card to focus."
+                      : "Timeline preview. Double-click a card to focus."
+                    : timelineIsArchived
+                      ? "Archived timeline is read-only. `←` or `Esc` returns."
+                      : "Read-only timeline. `←` or `Esc` returns."}
                 </p>
-                <button
-                  type="button"
-                  className="back-button"
-                  data-testid="timeline-back-button"
-                  onClick={onBackToList}
-                >
-                  Back to list
-                </button>
+                {isTimelinePreview ? null : (
+                  <button
+                    type="button"
+                    className="back-button"
+                    data-testid="timeline-back-button"
+                    onClick={onBackToList}
+                  >
+                    Back to list
+                  </button>
+                )}
               </div>
             </div>
 
