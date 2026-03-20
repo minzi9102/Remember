@@ -119,6 +119,7 @@ describe("RememberShell sqlite-only views", () => {
     expect(markup).toContain("Remember");
     expect(markup).toContain("data-testid=\"view-toggle-container\"");
     expect(markup).toContain("data-testid=\"shortcut-hints-watermark\"");
+    expect(markup).toContain("press Enter to capture.");
     expect(markup).toContain("data-testid=\"workspace-glass-placeholder\"");
     expect(markup).toContain("class=\"workspace-stage cross-axis-stage\"");
     expect(markup).not.toContain("workspace-stage cross-axis-stage has-timeline-lane");

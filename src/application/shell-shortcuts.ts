@@ -144,7 +144,7 @@ export function interpretShellKeyboardEvent(
     return guardPending(shell, { type: "archive_selected" });
   }
 
-  if (isPrintableKey(event.key)) {
+  if (event.key === "Enter") {
     if (shell.seriesCollection === "archived") {
       return buildArchiveReadOnlyIntent();
     }
@@ -153,10 +153,10 @@ export function interpretShellKeyboardEvent(
       return buildBlockedIntent("NO_SERIES_SELECTED", "select a series before writing a commit");
     }
 
-    return {
+    return guardPending(shell, {
       type: "start_commit_draft",
-      initialContent: event.key,
-    };
+      initialContent: "",
+    });
   }
 
   return NOOP_INTENT;
@@ -164,10 +164,6 @@ export function interpretShellKeyboardEvent(
 
 function hasBlockedModifier(event: NormalizedShellKeyboardEvent): boolean {
   return event.ctrlKey || event.metaKey || event.altKey;
-}
-
-function isPrintableKey(key: string): boolean {
-  return key.length === 1;
 }
 
 function guardPending(

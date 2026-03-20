@@ -639,7 +639,7 @@ function App() {
           type: "interaction.draft_commit.opened",
           initialContent: intent.initialContent,
         });
-        seededCommitCharRef.current = intent.initialContent;
+        seededCommitCharRef.current = null;
         isCommitComposingRef.current = false;
         return;
       default:

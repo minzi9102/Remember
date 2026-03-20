@@ -62,7 +62,7 @@ export function RememberShell({
   const showTimelineLane = shell.view === "timeline" || isTimelinePreview;
   const listHint = isArchivedCollection
     ? "`↑/↓` select, double-click opens focused timeline, `/` searches. Archived series stay read-only."
-    : "`↑/↓` select, double-click opens focused timeline, `/` searches, `Shift+N` creates, `a` archives silent, type to capture.";
+    : "`↑/↓` select, double-click opens focused timeline, `/` searches, `Shift+N` creates, `a` archives silent, press Enter to capture.";
   const selectedSeriesCardRef = useRef<HTMLLIElement | null>(null);
   const mainRailRef = useRef<HTMLDivElement | null>(null);
 

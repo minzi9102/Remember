@@ -268,7 +268,7 @@ describe("shell keyboard shortcuts", () => {
     });
   });
 
-  it("blocks write shortcuts in the archived collection", () => {
+  it("blocks write and commit-open shortcuts in the archived collection", () => {
     const shell = buildShell({
       seriesCollection: "archived",
       seriesList: [
@@ -307,7 +307,7 @@ describe("shell keyboard shortcuts", () => {
     });
 
     expect(
-      interpretShellKeyboardEvent(shell, buildKeyboardEvent({ key: "x" })),
+      interpretShellKeyboardEvent(shell, buildKeyboardEvent({ key: "Enter" })),
     ).toEqual({
       type: "blocked",
       feedback: {
@@ -317,16 +317,25 @@ describe("shell keyboard shortcuts", () => {
     });
   });
 
-  it("starts a commit draft from the first printable key", () => {
+  it("starts a commit draft with Enter in browse mode", () => {
+    const intent = interpretShellKeyboardEvent(
+      buildShell(),
+      buildKeyboardEvent({ key: "Enter" }),
+    );
+
+    expect(intent).toEqual({
+      type: "start_commit_draft",
+      initialContent: "",
+    });
+  });
+
+  it("does not start a commit draft from printable keys in browse mode", () => {
     const intent = interpretShellKeyboardEvent(
       buildShell(),
       buildKeyboardEvent({ key: "x" }),
     );
 
-    expect(intent).toEqual({
-      type: "start_commit_draft",
-      initialContent: "x",
-    });
+    expect(intent).toEqual({ type: "noop" });
   });
 
   it("ignores repeats, IME composition, modifiers, and editable targets", () => {
@@ -380,12 +389,12 @@ describe("shell keyboard shortcuts", () => {
     ).toEqual({ type: "noop" });
   });
 
-  it("blocks printable shortcuts when no series is selected", () => {
+  it("blocks commit-open shortcut when no series is selected", () => {
     const intent = interpretShellKeyboardEvent(
       buildShell({
         selectedSeriesId: null,
       }),
-      buildKeyboardEvent({ key: "x" }),
+      buildKeyboardEvent({ key: "Enter" }),
     );
 
     expect(intent).toEqual({
