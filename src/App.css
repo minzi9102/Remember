@@ -281,22 +281,22 @@ button {
 
 .workspace-stage.has-timeline-lane {
   border: 1px solid rgba(148, 163, 184, 0.26);
-  border-radius: 22px;
+  border-radius: 0;
   background-color: rgba(255, 255, 255, 0.3);
   box-shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
   overflow: hidden;
 }
 
 .workspace-glass-placeholder {
   min-height: 320px;
   border: 1px solid rgba(148, 163, 184, 0.26);
-  border-radius: 22px;
+  border-radius: 0;
   background-color: rgba(255, 255, 255, 0.3);
   box-shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
 }
 
 .panel {
@@ -950,7 +950,10 @@ button {
 @media (prefers-color-scheme: dark) {
   .workspace-stage.has-timeline-lane,
   .workspace-glass-placeholder {
+    border-radius: 0;
     border-color: rgba(148, 163, 184, 0.36);
     background-color: rgba(15, 23, 42, 0.34);
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
   }
 }
