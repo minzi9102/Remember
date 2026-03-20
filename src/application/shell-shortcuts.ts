@@ -1,7 +1,9 @@
 import type { RpcError, ShellState } from "./types";
+import { isImeBoundaryKey } from "./commit-draft-ime";
 
 export interface NormalizedShellKeyboardEvent {
   key: string;
+  keyCode: number;
   shiftKey: boolean;
   ctrlKey: boolean;
   metaKey: boolean;
@@ -58,7 +60,7 @@ export function interpretShellKeyboardEvent(
   shell: ShellState,
   event: NormalizedShellKeyboardEvent,
 ): ShellKeyboardIntent {
-  if (event.repeat || event.isComposing || hasBlockedModifier(event)) {
+  if (event.repeat || event.isComposing || hasBlockedModifier(event) || isImeBoundaryKey(event)) {
     return NOOP_INTENT;
   }
 

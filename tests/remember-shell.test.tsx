@@ -98,6 +98,8 @@ function renderShellMarkup(shell: ShellState, options?: { drawerOpen?: boolean }
       onSearchQueryChange={noop}
       onNewSeriesNameDraftChange={noop}
       onCommitDraftChange={noop}
+      onCommitDraftCompositionStart={noop}
+      onCommitDraftCompositionEnd={noop}
     />,
   );
 }

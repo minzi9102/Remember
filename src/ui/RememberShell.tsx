@@ -18,6 +18,8 @@ interface RememberShellProps {
   onSearchQueryChange: (query: string) => void;
   onNewSeriesNameDraftChange: (value: string) => void;
   onCommitDraftChange: (value: string) => void;
+  onCommitDraftCompositionStart: () => void;
+  onCommitDraftCompositionEnd: () => void;
 }
 
 export function RememberShellLoading() {
@@ -46,6 +48,8 @@ export function RememberShell({
   onSearchQueryChange,
   onNewSeriesNameDraftChange,
   onCommitDraftChange,
+  onCommitDraftCompositionStart,
+  onCommitDraftCompositionEnd,
 }: RememberShellProps) {
   const startupSelfHeal = shell.commandProbe.envelope.meta.startupSelfHeal;
   const selectedSeries = findSeriesById(shell.seriesList, shell.selectedSeriesId);
@@ -285,6 +289,8 @@ export function RememberShell({
                 type="text"
                 value={shell.commitDraft}
                 onChange={(event) => onCommitDraftChange(event.target.value)}
+                onCompositionStart={onCommitDraftCompositionStart}
+                onCompositionEnd={onCommitDraftCompositionEnd}
                 placeholder="Type a commit and press Enter"
                 autoComplete="off"
                 spellCheck={false}

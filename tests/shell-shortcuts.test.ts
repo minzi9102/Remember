@@ -86,6 +86,7 @@ function buildKeyboardEvent(
 ) {
   return {
     key: "ArrowDown",
+    keyCode: 0,
     shiftKey: false,
     ctrlKey: false,
     metaKey: false,
@@ -340,6 +341,27 @@ describe("shell keyboard shortcuts", () => {
       interpretShellKeyboardEvent(
         buildShell(),
         buildKeyboardEvent({ key: "x", isComposing: true }),
+      ),
+    ).toEqual({ type: "noop" });
+
+    expect(
+      interpretShellKeyboardEvent(
+        buildShell(),
+        buildKeyboardEvent({ key: "Process" }),
+      ),
+    ).toEqual({ type: "noop" });
+
+    expect(
+      interpretShellKeyboardEvent(
+        buildShell(),
+        buildKeyboardEvent({ key: "Unidentified" }),
+      ),
+    ).toEqual({ type: "noop" });
+
+    expect(
+      interpretShellKeyboardEvent(
+        buildShell(),
+        buildKeyboardEvent({ key: "x", keyCode: 229 }),
       ),
     ).toEqual({ type: "noop" });
 

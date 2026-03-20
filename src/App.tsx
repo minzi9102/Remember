@@ -8,6 +8,7 @@ import {
   loadTimeline,
 } from "./adapter/runtime-adapter";
 import { bootstrapShell, loadSeriesCollection } from "./application/bootstrap";
+import { shouldRollbackSeededCommitDraft } from "./application/commit-draft-ime";
 import { interpretShellKeyboardEvent } from "./application/shell-shortcuts";
 import { shellReducer, type ShellAction } from "./application/shell-view-model";
 import type { RpcError, SeriesCollection, ShellState } from "./application/types";
@@ -44,6 +45,8 @@ function App() {
   const latestSearchRequestIdRef = useRef(0);
   const latestTimelineRequestIdRef = useRef(0);
   const latestPreviewKeyRef = useRef<string | null>(null);
+  const seededCommitCharRef = useRef<string | null>(null);
+  const isCommitComposingRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -388,9 +391,9 @@ function App() {
       return;
     }
 
-    startTransition(() => {
-      dispatch({ type: "interaction.draft_commit.opened" });
-    });
+    seededCommitCharRef.current = null;
+    isCommitComposingRef.current = false;
+    dispatch({ type: "interaction.draft_commit.opened" });
   });
 
   const submitCommitDraft = useEffectEvent(async () => {
@@ -468,6 +471,8 @@ function App() {
     startTransition(() => {
       dispatch({ type: "interaction.cancelled" });
     });
+    seededCommitCharRef.current = null;
+    isCommitComposingRef.current = false;
 
     await refreshActiveSeriesList(
       shell.selectedSeriesId,
@@ -557,6 +562,7 @@ function App() {
 
     const intent = interpretShellKeyboardEvent(shell, {
       key: event.key,
+      keyCode: event.keyCode,
       shiftKey: event.shiftKey,
       ctrlKey: event.ctrlKey,
       metaKey: event.metaKey,
@@ -603,6 +609,8 @@ function App() {
         startTransition(() => {
           dispatch({ type: "interaction.cancelled" });
         });
+        seededCommitCharRef.current = null;
+        isCommitComposingRef.current = false;
         if (shell.interactionMode === "search") {
           void runSeriesSearch("");
         }
@@ -627,12 +635,12 @@ function App() {
         void archiveSelectedSeries();
         return;
       case "start_commit_draft":
-        startTransition(() => {
-          dispatch({
-            type: "interaction.draft_commit.opened",
-            initialContent: intent.initialContent,
-          });
+        dispatch({
+          type: "interaction.draft_commit.opened",
+          initialContent: intent.initialContent,
         });
+        seededCommitCharRef.current = intent.initialContent;
+        isCommitComposingRef.current = false;
         return;
       default:
         return;
@@ -646,6 +654,27 @@ function App() {
       window.removeEventListener("keydown", handleWindowKeyDown);
     };
   }, [handleWindowKeyDown]);
+
+  const handleCommitDraftCompositionStart = useEffectEvent(() => {
+    isCommitComposingRef.current = true;
+
+    if (shell === null || shell.interactionMode !== "draft_commit") {
+      return;
+    }
+
+    if (shouldRollbackSeededCommitDraft(shell.commitDraft, seededCommitCharRef.current)) {
+      dispatch({
+        type: "interaction.draft_commit.changed",
+        value: "",
+      });
+      seededCommitCharRef.current = null;
+    }
+  });
+
+  const handleCommitDraftCompositionEnd = useEffectEvent(() => {
+    isCommitComposingRef.current = false;
+    seededCommitCharRef.current = null;
+  });
 
   if (shell === null) {
     return <RememberShellLoading />;
@@ -695,9 +724,20 @@ function App() {
         });
       }}
       onCommitDraftChange={(value) => {
-        startTransition(() => {
-          dispatch({ type: "interaction.draft_commit.changed", value });
-        });
+        dispatch({ type: "interaction.draft_commit.changed", value });
+        if (
+          !isCommitComposingRef.current &&
+          seededCommitCharRef.current !== null &&
+          value !== seededCommitCharRef.current
+        ) {
+          seededCommitCharRef.current = null;
+        }
+      }}
+      onCommitDraftCompositionStart={() => {
+        handleCommitDraftCompositionStart();
+      }}
+      onCommitDraftCompositionEnd={() => {
+        handleCommitDraftCompositionEnd();
       }}
     />
   );
