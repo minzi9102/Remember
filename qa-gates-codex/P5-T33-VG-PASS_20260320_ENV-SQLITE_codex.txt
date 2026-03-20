@@ -1,0 +1,38 @@
+P5-T33 Visual Verification (Transparent layering + Main Rail interaction)
+Date: 2026-03-20
+Env: ENV-SQLITE
+Tester: codex
+
+Evidence files
+- P5-T33-VG-PASS_20260320_ENV-SQLITE_codex-list-before.png
+- P5-T33-VG-PASS_20260320_ENV-SQLITE_codex-list-after-keyboard.png
+- P5-T33-VG-PASS_20260320_ENV-SQLITE_codex-wheel-before.png
+- P5-T33-VG-PASS_20260320_ENV-SQLITE_codex-wheel-after.png
+- P5-T33-VG-FAIL_20260320_ENV-SQLITE_codex-tauri-transparent-handle-capture.png
+- P5-T33-VG-FAIL_20260320_ENV-SQLITE_codex-tauri-transparent-fallback-desktop.png
+
+Structured result
+1) Global transparent Tauri effect: BLOCKED
+- Reason: window-handle capture generated an almost-empty image (137 bytes).
+- Fallback desktop capture did not include a visible Remember Tauri window, so desktop pass-through cannot be verified from this run.
+
+2) Top area is solid layer: PASS (browser evidence)
+- Observed in list-before/list-after and wheel before/after screenshots.
+- Header and Main Rail area use opaque light background and subtle shadow separation.
+
+3) Lower blank area glass placeholder: PASS (browser evidence)
+- Observed frosted translucent block below top dock in all browser screenshots.
+
+4) Main Rail scrollbar hidden: PASS (browser evidence)
+- No visible native scrollbar shown in list or wheel screenshots.
+
+5) Nearest-edge alignment on keyboard selection: PASS (browser evidence)
+- list-before: Inbox selected.
+- list-after-keyboard: selection moved to Project-A and rail adjusted to keep target visible without center-forcing.
+
+6) Wheel-to-horizontal mapping: PASS (browser evidence)
+- wheel-before and wheel-after show horizontal rail position changed after vertical wheel input.
+
+Notes
+- Browser verification used Playwright with viewport resize to force horizontal overflow for wheel mapping observation.
+- Tauri transparency remains unverified in this environment due capture limitation.

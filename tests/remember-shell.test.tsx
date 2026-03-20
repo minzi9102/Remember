@@ -112,6 +112,7 @@ describe("RememberShell sqlite-only views", () => {
     expect(markup).toContain("data-testid=\"top-dock\"");
     expect(markup).toContain("data-testid=\"main-rail\"");
     expect(markup).toContain("data-testid=\"series-rail\"");
+    expect(markup).toContain("data-testid=\"workspace-glass-placeholder\"");
     expect(markup).toContain("data-testid=\"diagnostics-drawer-toggle\"");
     expect(markup).toContain("aria-controls=\"diagnostics-drawer-panel\"");
     expect(markup).toContain("aria-expanded=\"false\"");
@@ -209,6 +210,7 @@ describe("RememberShell sqlite-only views", () => {
     expect(timelineMarkup).toContain("Read-only timeline");
     expect(timelineMarkup).toContain("data-testid=\"timeline-lane\"");
     expect(timelineMarkup).toContain("first-note");
+    expect(timelineMarkup).not.toContain("data-testid=\"workspace-glass-placeholder\"");
     expect(archivedMarkup).toContain("Archived Series");
     expect(archivedMarkup).toContain("Archived series stay read-only.");
   });

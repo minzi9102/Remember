@@ -56,6 +56,7 @@ export function RememberShell({
     ? "`↑/↓` select, `→` opens timeline, `/` searches. Archived series stay read-only."
     : "`↑/↓` select, `→` opens timeline, `/` searches, `Shift+N` creates, `a` archives silent, type to capture.";
   const selectedSeriesCardRef = useRef<HTMLLIElement | null>(null);
+  const mainRailRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (shell.selectedSeriesId === null || shell.seriesList.length === 0) {
@@ -63,11 +64,49 @@ export function RememberShell({
     }
 
     selectedSeriesCardRef.current?.scrollIntoView({
-      behavior: "auto",
+      behavior: "smooth",
       block: "nearest",
-      inline: "center",
+      inline: "nearest",
     });
   }, [shell.selectedSeriesId, shell.seriesCollection, shell.seriesList]);
+
+  useEffect(() => {
+    const mainRailElement = mainRailRef.current;
+    if (mainRailElement === null) {
+      return;
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      if (
+        event.ctrlKey ||
+        event.deltaY === 0 ||
+        Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      ) {
+        return;
+      }
+
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+
+      const normalizedDelta =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? event.deltaY * 16
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? event.deltaY * mainRailElement.clientWidth
+            : event.deltaY;
+
+      mainRailElement.scrollLeft += normalizedDelta;
+    };
+
+    mainRailElement.addEventListener("wheel", handleWheel, {
+      passive: false,
+    });
+
+    return () => {
+      mainRailElement.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
 
   return (
     <main className="remember-shell" data-testid="remember-shell">
@@ -192,7 +231,7 @@ export function RememberShell({
             </div>
           ) : null}
 
-          <div className="main-rail" data-testid="main-rail">
+          <div className="main-rail" data-testid="main-rail" ref={mainRailRef}>
             {shell.seriesList.length === 0 ? (
               <div className="empty-state" data-testid="series-empty-state">
                 <h3>{isArchivedCollection ? "No archived series" : "No series yet"}</h3>
@@ -289,6 +328,13 @@ export function RememberShell({
       </section>
 
       <section className="workspace-stage cross-axis-stage" data-testid="workspace-stage">
+        {shell.view === "series_list" ? (
+          <article
+            className="workspace-glass-placeholder"
+            data-testid="workspace-glass-placeholder"
+            aria-hidden="true"
+          />
+        ) : null}
 
         {shell.view === "timeline" ? (
           <article className="panel stage-panel timeline-lane" data-testid="timeline-lane">

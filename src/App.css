@@ -4,7 +4,7 @@
   line-height: 1.5;
   font-weight: 400;
   color: #1f2937;
-  background: rgba(247, 241, 232, 0.84);
+  background: transparent;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -26,7 +26,7 @@ body,
 #root {
   width: 100%;
   min-height: 100%;
-  background: rgba(247, 241, 232, 0.84);
+  background: transparent;
 }
 
 button {
@@ -48,9 +48,9 @@ button {
   width: 100vw;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
-  border-bottom: 1px solid rgba(251, 191, 36, 0.24);
-  background: rgba(255, 251, 244, 0.86);
-  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fafafa;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
 }
 
 .top-dock-header {
@@ -62,7 +62,7 @@ button {
   border: 0;
   border-top: 1px solid rgba(251, 191, 36, 0.2);
   border-radius: 0;
-  background: transparent;
+  background: #fafafa;
   box-shadow: none;
   padding: 12px 0 14px;
 }
@@ -166,6 +166,16 @@ button {
 .workspace-stage {
   margin-top: 16px;
   margin-bottom: 18px;
+}
+
+.workspace-glass-placeholder {
+  min-height: 320px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 22px;
+  background-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .panel {
@@ -324,9 +334,15 @@ button {
 .main-rail {
   border: 1px solid #fde68a;
   border-radius: 20px;
-  background: linear-gradient(135deg, #fffbeb 0%, #fff 80%);
+  background: #fffdf8;
   padding: 14px;
   overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.main-rail::-webkit-scrollbar {
+  display: none;
 }
 
 .series-rail {
@@ -351,10 +367,10 @@ button {
   gap: 10px;
   justify-content: space-between;
   transition:
-    transform 140ms ease,
-    border-color 140ms ease,
-    box-shadow 140ms ease,
-    background-color 140ms ease;
+    transform 0.2s ease-in-out,
+    border-color 0.2s ease-in-out,
+    box-shadow 0.2s ease-in-out,
+    background-color 0.2s ease-in-out;
 }
 
 .series-card.is-selected {
@@ -758,5 +774,12 @@ button {
   .diagnostics-drawer {
     width: 100vw;
     padding: 14px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .workspace-glass-placeholder {
+    border-color: rgba(148, 163, 184, 0.36);
+    background-color: rgba(15, 23, 42, 0.34);
   }
 }
