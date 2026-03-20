@@ -279,6 +279,16 @@ button {
   padding: 16px 16px calc(72px + env(safe-area-inset-bottom));
 }
 
+.workspace-stage.has-timeline-lane {
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 22px;
+  background-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+
 .workspace-glass-placeholder {
   min-height: 320px;
   border: 1px solid rgba(148, 163, 184, 0.26);
@@ -308,7 +318,9 @@ button {
 }
 
 .cross-axis-stage {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   gap: 16px;
 }
 
@@ -615,8 +627,26 @@ button {
 
 .timeline-lane {
   display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
   flex-direction: column;
   gap: 12px;
+}
+
+.workspace-stage.has-timeline-lane .timeline-lane {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 20px;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.workspace-stage.has-timeline-lane .panel-heading,
+.workspace-stage.has-timeline-lane .timeline-list {
+  padding-left: 2px;
+  padding-right: 2px;
 }
 
 .timeline-list {
@@ -626,6 +656,9 @@ button {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .timeline-entry {
@@ -915,6 +948,7 @@ button {
 }
 
 @media (prefers-color-scheme: dark) {
+  .workspace-stage.has-timeline-lane,
   .workspace-glass-placeholder {
     border-color: rgba(148, 163, 184, 0.36);
     background-color: rgba(15, 23, 42, 0.34);

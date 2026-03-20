@@ -118,6 +118,8 @@ describe("RememberShell sqlite-only views", () => {
     expect(markup).toContain("data-testid=\"view-toggle-container\"");
     expect(markup).toContain("data-testid=\"shortcut-hints-watermark\"");
     expect(markup).toContain("data-testid=\"workspace-glass-placeholder\"");
+    expect(markup).toContain("class=\"workspace-stage cross-axis-stage\"");
+    expect(markup).not.toContain("workspace-stage cross-axis-stage has-timeline-lane");
     expect(markup).toContain("data-testid=\"diagnostics-drawer-toggle\"");
     expect(markup).toContain("aria-controls=\"diagnostics-drawer-panel\"");
     expect(markup).toContain("aria-expanded=\"false\"");
@@ -157,6 +159,7 @@ describe("RememberShell sqlite-only views", () => {
     );
 
     expect(markup).toContain("data-testid=\"timeline-lane\"");
+    expect(markup).toContain("workspace-stage cross-axis-stage has-timeline-lane");
     expect(markup).toContain("Timeline preview. Double-click a card to focus.");
     expect(markup).toContain("first-note");
     expect(markup).not.toContain("data-testid=\"timeline-back-button\"");

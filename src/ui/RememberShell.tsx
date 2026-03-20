@@ -305,7 +305,10 @@ export function RememberShell({
         </article>
       </section>
 
-      <section className="workspace-stage cross-axis-stage" data-testid="workspace-stage">
+      <section
+        className={`workspace-stage cross-axis-stage${showTimelineLane ? " has-timeline-lane" : ""}`}
+        data-testid="workspace-stage"
+      >
         {!showTimelineLane ? (
           <article
             className="workspace-glass-placeholder"
