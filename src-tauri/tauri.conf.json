@@ -14,7 +14,9 @@
       {
         "label": "main",
         "title": "tauri-app",
-        "fullscreen": true,
+        "fullscreen": false,
+        "maximized": true,
+        "backgroundColor": "#00000000",
         "transparent": true,
         "decorations": false,
         "shadow": false

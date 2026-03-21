@@ -14,6 +14,7 @@ static TRACING_INIT: Once = Once::new();
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     init_tracing();
+    configure_windows_webview_background();
     tracing::info!(component = "bootstrap", "starting tauri runtime");
 
     let builder = tauri::Builder::default();
@@ -29,6 +30,22 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn configure_windows_webview_background() {
+    #[cfg(target_os = "windows")]
+    {
+        const WEBVIEW2_BACKGROUND_KEY: &str = "WEBVIEW2_DEFAULT_BACKGROUND_COLOR";
+        const TRANSPARENT_RGBA_HEX: &str = "00000000";
+
+        std::env::set_var(WEBVIEW2_BACKGROUND_KEY, TRANSPARENT_RGBA_HEX);
+        tracing::info!(
+            component = "bootstrap",
+            key = WEBVIEW2_BACKGROUND_KEY,
+            value = TRANSPARENT_RGBA_HEX,
+            "configured webview2 transparent default background"
+        );
+    }
 }
 
 fn enforce_startup_window_state(app: &AppHandle) {
@@ -63,20 +80,29 @@ fn enforce_startup_window_state(app: &AppHandle) {
         );
     }
 
-    if matches!(window.is_fullscreen(), Ok(false)) {
-        if let Err(error) = window.set_fullscreen(true) {
+    if matches!(window.is_fullscreen(), Ok(true)) {
+        if let Err(error) = window.set_fullscreen(false) {
             tracing::warn!(
                 component = "bootstrap",
                 ?error,
-                "window startup self-heal failed: set_fullscreen(true)"
+                "window startup self-heal failed: set_fullscreen(false)"
             );
-            return;
+        }
+    }
+
+    if matches!(window.is_maximized(), Ok(false)) {
+        if let Err(error) = window.maximize() {
+            tracing::warn!(
+                component = "bootstrap",
+                ?error,
+                "window startup self-heal failed: maximize()"
+            );
         }
     }
 
     tracing::info!(
         component = "bootstrap",
-        "window startup state validated: fullscreen transparent undecorated target"
+        "window startup state validated: maximized transparent undecorated target"
     );
 }
 
@@ -95,7 +121,7 @@ fn apply_main_window_blur(app: &AppHandle) {
             return;
         };
 
-        if let Err(error) = apply_blur(&window, Some((18, 18, 18, 125))) {
+        if let Err(error) = apply_blur(&window, Some((255, 255, 255, 110))) {
             tracing::warn!(
                 component = "bootstrap",
                 ?error,
@@ -106,7 +132,7 @@ fn apply_main_window_blur(app: &AppHandle) {
 
         tracing::info!(
             component = "bootstrap",
-            "window blur setup completed with medium intensity"
+            "window blur setup completed with light tint"
         );
     }
 
