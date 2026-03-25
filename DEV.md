@@ -15,11 +15,8 @@
 
 ## 发布与回滚文档入口
 - 发布总手册：`RELEASE.md`
-- 发布配置与排障门禁定义：`qa-gates/phase-5/p5-t31-release-config-troubleshooting.md`
-- 发布清单与回滚门禁定义：`qa-gates/phase-5/p5-t32-release-gate-rollback.md`
-- Codex 执行版门禁定义：
-  - `qa-gates-codex/phase-5/p5-t31-release-config-troubleshooting.md`
-  - `qa-gates-codex/phase-5/p5-t32-release-gate-rollback.md`
+- 路线图与验收矩阵：`ROADMAP.md`
+- 任务追踪：`task.jsonl`
 
 ## 后端实现快照
 - 语言与运行时：`Rust`、`tokio`、`serde`、`tracing`、`uuid v7`、`chrono`。
@@ -29,7 +26,7 @@
 ## 模块边界（固定）
 - `remember-core`：业务用例、参数校验、DTO、错误语义、`MemoRepository` trait。
 - `remember-ipc-server`：本地 IPC 监听、鉴权、路由分发、请求生命周期与诊断元数据生成。
-- `repository-sqlite`：`MemoRepository` 的 SQLite 实现与迁移执行。
+- `remember-sqlite`：`MemoRepository` 的 SQLite 实现与迁移执行。
 
 ## 运行时真相
 
@@ -162,14 +159,14 @@
 - 历史接入层可能出现 `runtimeMode`、`usedFallback`、`startupSelfHeal` 等字段。
 - 这些字段不属于当前后端技术定义承诺，客户端不得作为兼容依赖。
 
-### `src-tauri/migrations/postgres`
-- 仓库仍保留历史 Postgres migration 目录。
-- 该目录不属于当前运行模式与技术承诺范围。
+### 历史 Postgres 叙事
+- 旧的 Postgres 运行时与双写叙事已退役，不属于当前仓库主线。
+- 当前主线仅承诺 SQLite 本地持久化。
 
 ## 测试基线（本次文档任务）
-- `npm run test:unit`：未在本次任务中执行。
-- `cargo test`（`src-tauri`）：未在本次任务中执行。
-- 本次仅更新技术定义文档，不涉及代码路径改动。
+- `cargo check --workspace`：已执行通过。
+- `cargo test --workspace`：未在本次任务中执行。
+- 当前文档已对齐纯后端 workspace 结构。
 
 ## 不再承诺的路线
 - 不承诺任何壳层或前端实现（WinUI/Tauri/React）。

@@ -1,15 +1,26 @@
-{"task_name":"P4-T1 四件套职责重写与交叉去重","completed":true}
-{"task_name":"P4-T2 重写 product.md 并移除旧后端与归档数据库叙事","completed":true}
-{"task_name":"P4-T3 重写 DEV.md 并冻结 SQLite-only 技术真相","completed":true}
-{"task_name":"P4-T4 重建 ROADMAP.md 为当前分支阶段状态文档","completed":true}
-{"task_name":"P4-T5 迁移并退役 PLAN1.md","completed":true}
-{"task_name":"P4-T6 完成文档一致性扫描并确认旧架构不再被写成当前能力","completed":true}
-{"task_name":"P5-T1 执行 SQLite-only 全链路回归与兼容 warning 验收","completed":true}
-{"task_name":"P5-T2 完成性能与稳定性基线检查","completed":true}
-{"task_name":"P5-T3 补齐发布配置、排障文档、发布清单与回滚策略","completed":true}
-{"task_name":"P6-T1 合并 Cross-Axis vNext 定义文档并冻结目标态口径","completed":true}
-{"task_name":"P6-T2 重构前端布局为横向主轨道与纵向 Timeline 十字架构","completed":false}
-{"task_name":"P6-T3 重映射键盘导航与焦点状态机（←/→/↓/↑/Esc）","completed":false}
-{"task_name":"P6-T4 实现全局悬浮命令条与附着草稿框分层交互","completed":false}
-{"task_name":"P6-T5 收敛 Archived 切换为右上按钮 mouse-only 策略","completed":false}
-{"task_name":"P6-T6 更新并执行 phase-4 门禁回归以匹配 vNext 交互","completed":false}
+{"task_name":"B0-T1 冻结旧主线tag tauri-last-stable","completed":true}
+{"task_name":"B0-T2 全量重写 ROADMAP 为纯后端结构","completed":true}
+{"task_name":"B0-T3 追加 P* -> B* 历史映射","completed":true}
+{"task_name":"B0-T4 改写 PLAN.md 为后端改造计划","completed":true}
+{"task_name":"B1-T1 建立根 Cargo workspace","completed":true}
+{"task_name":"B1-T2 拆分 crates/remember-core remember-sqlite remember-ipc-server remember-cli","completed":true}
+{"task_name":"B1-T3 删除前端与 Tauri 资产","completed":true}
+{"task_name":"B1-T4 清理 tauri/node 构建链","completed":true}
+{"task_name":"B2-T1 实现 Named Pipe 生产通道","completed":true}
+{"task_name":"B2-T2 实现 Loopback 调试通道（默认关闭）","completed":true}
+{"task_name":"B2-T3 实现 token 鉴权","completed":true}
+{"task_name":"B2-T4 健康检查与优雅退出","completed":true}
+{"task_name":"B3-T1 固化 6 条 RPC 语义兼容","completed":true}
+{"task_name":"B3-T2 固化错误码语义兼容","completed":true}
+{"task_name":"B3-T3 固化 SQLite 非破坏兼容","completed":false}
+{"task_name":"B3-T4 保留 legacy 配置 warning 行为","completed":false}
+{"task_name":"B4-T1 交付 remember-cli health","completed":true}
+{"task_name":"B4-T2 交付 remember-cli rpc call","completed":true}
+{"task_name":"B4-T3 增加服务启动连通 smoke 脚本","completed":true}
+{"task_name":"B5-T1 重写 README 与 RELEASE 后端口径","completed":true}
+{"task_name":"B5-T2 删除 qa-gates 与 qa-gates-codex","completed":true}
+{"task_name":"B5-T3 在 ROADMAP 补充轻量验收矩阵","completed":true}
+{"task_name":"B5-T4 task.jsonl 切换到 B* 体系","completed":true}
+{"task_name":"B6-T1 全量测试与回归","completed":false}
+{"task_name":"B6-T2 性能基线重建","completed":false}
+{"task_name":"B6-T3 发布候选与回滚说明","completed":false}

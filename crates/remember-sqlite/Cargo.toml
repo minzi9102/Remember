@@ -1,0 +1,12 @@
+[package]
+name = "remember-sqlite"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = { workspace = true }
+remember-core = { path = "../remember-core" }
+sqlx = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

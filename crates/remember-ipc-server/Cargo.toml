@@ -1,0 +1,18 @@
+[package]
+name = "remember-ipc-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+remember-core = { path = "../remember-core" }
+remember-sqlite = { path = "../remember-sqlite" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+sqlx = { workspace = true }
