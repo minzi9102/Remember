@@ -32,3 +32,6 @@ cargo run -p remember-cli -- rpc call --path series.list --payload '{"query":"",
 - `REMEMBER_IPC_PIPE`: override named pipe path.
 - `REMEMBER_ENABLE_LOOPBACK=1`: enable loopback transport.
 - `REMEMBER_LOOPBACK_ADDR`: override loopback bind address.
+
+## Frontend Integration
+- `FRONTEND_INTEGRATION.md`: desktop-shell-first frontend integration manual.
