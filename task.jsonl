@@ -21,6 +21,6 @@
 {"task_name":"B5-T2 删除 qa-gates 与 qa-gates-codex","completed":true}
 {"task_name":"B5-T3 在 ROADMAP 补充轻量验收矩阵","completed":true}
 {"task_name":"B5-T4 task.jsonl 切换到 B* 体系","completed":true}
-{"task_name":"B6-T1 全量测试与回归","completed":false}
+{"task_name":"B6-T1 全量测试与回归","completed":true}
 {"task_name":"B6-T2 性能基线重建","completed":false}
 {"task_name":"B6-T3 发布候选与回滚说明","completed":false}

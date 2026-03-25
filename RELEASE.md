@@ -12,7 +12,9 @@
 2. `cargo test --workspace`
 3. `cargo run -p remember-cli -- health`
 4. `cargo run -p remember-cli -- rpc call --path series.list --payload '{"query":"","includeArchived":false,"cursor":null,"limit":10}'`
-5. 校验配置路径与数据库路径解析（`REMEMBER_APPDATA_DIR` 覆盖与默认路径）。
+5. `powershell -ExecutionPolicy Bypass -File scripts/smoke-ipc.ps1`
+6. `powershell -ExecutionPolicy Bypass -File scripts/regression-b6-t1.ps1`
+7. 校验配置路径与数据库路径解析（`REMEMBER_APPDATA_DIR` 覆盖与默认路径）。
 
 ## 3. Go / No-Go
 - Go：构建、测试、CLI 健康与关键 RPC 调用全部通过。
