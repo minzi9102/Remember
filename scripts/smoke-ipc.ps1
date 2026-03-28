@@ -1,5 +1,6 @@
 param(
-  [string]$AuthToken = "remember-local-dev-token"
+  [string]$AuthToken = "remember-local-dev-token",
+  [int]$ReliabilityIterations = 50
 )
 
 $ErrorActionPreference = "Stop"
@@ -130,6 +131,33 @@ try {
   }
   if (-not $rpcOk) {
     throw "rpc smoke call failed after retries: $lastRpcError"
+  }
+
+  $probeTotal = [Math]::Max(1, $ReliabilityIterations)
+  $probeSuccess = 0
+  $failureSamples = @()
+  for ($i = 1; $i -le $probeTotal; $i++) {
+    $probe = Invoke-CliCommand -CommandArgs $rpcArgs
+    if ($probe.ExitCode -eq 0) {
+      $probeSuccess++
+      continue
+    }
+
+    if ($failureSamples.Count -lt 5) {
+      $failureMessage = if ([string]::IsNullOrWhiteSpace($probe.StdErr)) { $probe.StdOut } else { $probe.StdErr }
+      $failureSamples += "[attempt=$i] $failureMessage"
+    }
+  }
+
+  $probeFailure = $probeTotal - $probeSuccess
+  $successRate = [Math]::Round(($probeSuccess * 100.0) / $probeTotal, 2)
+  "named_pipe_reliability success=$probeSuccess/$probeTotal rate=${successRate}%" | Out-Host
+  if ($probeFailure -gt 0) {
+    "named_pipe_failure_samples:" | Out-Host
+    foreach ($sample in $failureSamples) {
+      "  $sample" | Out-Host
+    }
+    throw "named pipe reliability probe failed: $probeFailure/$probeTotal calls failed"
   }
 }
 finally {

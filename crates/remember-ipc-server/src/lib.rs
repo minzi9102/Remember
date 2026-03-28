@@ -1,5 +1,6 @@
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use remember_core::config::RuntimeConfigState;
@@ -12,6 +13,7 @@ use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::net::TcpListener;
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -22,11 +24,75 @@ const AUTH_ENV: &str = "REMEMBER_IPC_AUTH_TOKEN";
 const PIPE_ENV: &str = "REMEMBER_IPC_PIPE";
 const LOOPBACK_ENABLE_ENV: &str = "REMEMBER_ENABLE_LOOPBACK";
 const LOOPBACK_ADDR_ENV: &str = "REMEMBER_LOOPBACK_ADDR";
+const REPLAY_CACHE_TTL_SECS: u64 = 30;
+const REPLAY_CACHE_MAX_ENTRIES: usize = 4096;
 
 #[derive(Clone)]
 struct ServerState {
     service_state: ApplicationServiceState,
     auth_token: String,
+    replay_cache: Arc<Mutex<ResponseReplayCache>>,
+}
+
+struct CachedResponse {
+    response: String,
+    cached_at: Instant,
+}
+
+struct ResponseReplayCache {
+    entries: HashMap<String, CachedResponse>,
+    order: VecDeque<String>,
+    ttl: Duration,
+    max_entries: usize,
+}
+
+impl ResponseReplayCache {
+    fn new(ttl: Duration, max_entries: usize) -> Self {
+        Self {
+            entries: HashMap::new(),
+            order: VecDeque::new(),
+            ttl,
+            max_entries,
+        }
+    }
+
+    fn get(&mut self, request_id: &str) -> Option<String> {
+        self.prune_expired();
+        self.entries
+            .get(request_id)
+            .map(|entry| entry.response.clone())
+    }
+
+    fn insert(&mut self, request_id: String, response: String) {
+        self.prune_expired();
+        self.order.retain(|id| id != &request_id);
+        self.order.push_back(request_id.clone());
+        self.entries.insert(
+            request_id,
+            CachedResponse {
+                response,
+                cached_at: Instant::now(),
+            },
+        );
+        self.evict_overflow();
+    }
+
+    fn prune_expired(&mut self) {
+        let now = Instant::now();
+        let ttl = self.ttl;
+        self.entries
+            .retain(|_, entry| now.duration_since(entry.cached_at) <= ttl);
+        self.order.retain(|id| self.entries.contains_key(id));
+    }
+
+    fn evict_overflow(&mut self) {
+        while self.entries.len() > self.max_entries {
+            let Some(oldest_id) = self.order.pop_front() else {
+                break;
+            };
+            self.entries.remove(&oldest_id);
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,6 +139,10 @@ pub async fn run() -> Result<()> {
     let state = Arc::new(ServerState {
         service_state,
         auth_token,
+        replay_cache: Arc::new(Mutex::new(ResponseReplayCache::new(
+            Duration::from_secs(REPLAY_CACHE_TTL_SECS),
+            REPLAY_CACHE_MAX_ENTRIES,
+        ))),
     });
 
     let loopback_handle = maybe_spawn_loopback(state.clone()).await?;
@@ -178,9 +248,10 @@ async fn run_named_pipe_server(pipe_name: String, state: Arc<ServerState>) -> Re
         .with_context(|| format!("failed to create named pipe server at {pipe_name}"))?;
 
     loop {
-        server.connect().await.with_context(|| {
-            format!("failed to accept named pipe client on {pipe_name}")
-        })?;
+        server
+            .connect()
+            .await
+            .with_context(|| format!("failed to accept named pipe client on {pipe_name}"))?;
 
         let next = ServerOptions::new()
             .create(&pipe_name)
@@ -196,7 +267,10 @@ async fn run_named_pipe_server(pipe_name: String, state: Arc<ServerState>) -> Re
     }
 }
 
-async fn handle_named_pipe_client(mut pipe: NamedPipeServer, state: Arc<ServerState>) -> Result<()> {
+async fn handle_named_pipe_client(
+    mut pipe: NamedPipeServer,
+    state: Arc<ServerState>,
+) -> Result<()> {
     let mut line = String::new();
     {
         let mut reader = BufReader::new(&mut pipe);
@@ -219,7 +293,6 @@ async fn handle_named_pipe_client(mut pipe: NamedPipeServer, state: Arc<ServerSt
     pipe.flush()
         .await
         .context("failed to flush named pipe response")?;
-    let _ = pipe.disconnect();
     Ok(())
 }
 
@@ -250,14 +323,34 @@ async fn process_request_line(line: &str, transport: &str, state: &ServerState) 
         return serialize_envelope(&envelope);
     }
 
+    if let Some(cached_response) = {
+        let mut cache = state.replay_cache.lock().await;
+        cache.get(&request.id)
+    } {
+        tracing::debug!(
+            component = "server",
+            request_id = %request.id,
+            path = %request.path,
+            "replay cache hit"
+        );
+        return cached_response;
+    }
+
+    let request_id = request.id;
+    let path = request.path;
     let invocation = RpcInvocation {
-        request_id: request.id,
-        path: request.path,
+        request_id: request_id.clone(),
+        path: path.clone(),
         payload: request.payload,
         transport: transport.to_string(),
     };
     let envelope = handle_rpc(invocation, &state.service_state).await;
-    serialize_envelope(&envelope)
+    let response = serialize_envelope(&envelope);
+    {
+        let mut cache = state.replay_cache.lock().await;
+        cache.insert(request_id, response.clone());
+    }
+    response
 }
 
 fn rpc_error_envelope(
@@ -299,4 +392,88 @@ fn now_unix_ms() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_millis())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::thread::sleep;
+
+    use remember_core::repository::{DynMemoRepository, StartupSelfHealSummary};
+    use remember_core::service::{ApplicationService, ApplicationServiceState};
+    use remember_sqlite::{migrations::run_sqlite_migrations, SqliteRepository};
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    use super::*;
+
+    #[test]
+    fn replay_cache_returns_inserted_response() {
+        let mut cache = ResponseReplayCache::new(Duration::from_secs(30), 4);
+        cache.insert("req-1".to_string(), "resp-1".to_string());
+        assert_eq!(cache.get("req-1"), Some("resp-1".to_string()));
+    }
+
+    #[test]
+    fn replay_cache_evicts_oldest_entries_when_capacity_reached() {
+        let mut cache = ResponseReplayCache::new(Duration::from_secs(30), 2);
+        cache.insert("req-1".to_string(), "resp-1".to_string());
+        cache.insert("req-2".to_string(), "resp-2".to_string());
+        cache.insert("req-3".to_string(), "resp-3".to_string());
+
+        assert_eq!(cache.get("req-1"), None);
+        assert_eq!(cache.get("req-2"), Some("resp-2".to_string()));
+        assert_eq!(cache.get("req-3"), Some("resp-3".to_string()));
+    }
+
+    #[test]
+    fn replay_cache_prunes_expired_entries() {
+        let mut cache = ResponseReplayCache::new(Duration::from_millis(1), 4);
+        cache.insert("req-1".to_string(), "resp-1".to_string());
+        sleep(Duration::from_millis(10));
+
+        assert_eq!(cache.get("req-1"), None);
+    }
+
+    #[tokio::test]
+    async fn process_request_line_replays_cached_response_for_same_request_id() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("failed to connect sqlite memory db");
+        run_sqlite_migrations(&pool)
+            .await
+            .expect("failed to run sqlite migrations");
+
+        let repository: DynMemoRepository = Arc::new(SqliteRepository::new(pool.clone()));
+        let service = ApplicationService::new(repository, 7);
+        let state = ServerState {
+            service_state: ApplicationServiceState::new(service, StartupSelfHealSummary::clean()),
+            auth_token: DEFAULT_AUTH_TOKEN.to_string(),
+            replay_cache: Arc::new(Mutex::new(ResponseReplayCache::new(
+                Duration::from_secs(REPLAY_CACHE_TTL_SECS),
+                REPLAY_CACHE_MAX_ENTRIES,
+            ))),
+        };
+
+        let line = serde_json::json!({
+            "id": "req-fixed",
+            "path": "series.create",
+            "payload": { "name": "idempotency-series" },
+            "authToken": DEFAULT_AUTH_TOKEN
+        })
+        .to_string();
+
+        let first = process_request_line(&line, "named_pipe", &state).await;
+        let second = process_request_line(&line, "named_pipe", &state).await;
+
+        assert_eq!(first, second);
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM series WHERE name = ?")
+            .bind("idempotency-series")
+            .fetch_one(&pool)
+            .await
+            .expect("failed to query series count");
+        assert_eq!(count, 1);
+    }
 }

@@ -26,6 +26,33 @@ cargo run -p remember-cli -- health
 cargo run -p remember-cli -- rpc call --path series.list --payload '{"query":"","includeArchived":false,"cursor":null,"limit":20}'
 ```
 
+## Standard Operation (Named Pipe)
+- Keep `named_pipe` as the default path for routine operations (`health`, `rpc call`).
+- Start server and run:
+
+```powershell
+cargo run -p remember-ipc-server
+cargo run -p remember-cli -- health --transport named_pipe
+cargo run -p remember-cli -- rpc call --path series.list --payload '{"query":"","includeArchived":false,"cursor":null,"limit":20}' --transport named_pipe
+```
+
+- Run stability smoke check:
+
+```powershell
+.\scripts\smoke-ipc.ps1 -ReliabilityIterations 200
+```
+
+## Diagnostic Path (Loopback)
+- Use loopback only for transport diagnostics or temporary fallback.
+- Enable loopback and call:
+
+```powershell
+$env:REMEMBER_ENABLE_LOOPBACK="1"
+cargo run -p remember-ipc-server
+cargo run -p remember-cli -- health --transport loopback
+cargo run -p remember-cli -- rpc call --path series.list --payload '{"query":"","includeArchived":false,"cursor":null,"limit":20}' --transport loopback
+```
+
 ## Environment Variables
 - `REMEMBER_APPDATA_DIR`: override config/database directory.
 - `REMEMBER_IPC_AUTH_TOKEN`: auth token for IPC requests.
